@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src data: blob:; media-src blob: data:; base-uri 'none'; form-action 'none'">
+  <meta name="description" content="爱衣橱离线体验版：整理自己的衣物，组合穿搭，查看真实试穿案例。">
+  <title>爱衣橱 · 好好穿，已经拥有的</title>
+  <style>/*__STYLE__*/</style>
+</head>
+<body>
+  <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="icon-shirt" viewBox="0 0 24 24"><path d="m8 3-5 3-2 5 5 2v8h12v-8l5-2-2-5-5-3c0 3-8 3-8 0Z"/></symbol>
+    <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5"/></symbol>
+    <symbol id="icon-person" viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
+    <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+    <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="icon-heart" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 4 12 8-12 8V4Z"/></symbol>
+    <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 6V4h7l2 3h9v13H3V6Z"/></symbol>
+  </defs></svg>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#wardrobe" data-page="wardrobe" aria-label="爱衣橱，我的衣橱"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-shirt"/></svg></span><span>爱衣橱<small>EVERYDAY, IN YOUR OWN WAY</small></span></a>
+      <div class="nav-eyebrow">MY LITTLE SPACE / 我的空间</div>
+      <nav class="main-nav" aria-label="主导航">
+        <button type="button" class="nav-button active" data-page="wardrobe" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#icon-shirt"/></svg><span>我的衣橱</span><span class="nav-dot" aria-hidden="true"></span></button>
+        <button type="button" class="nav-button" data-page="fitting"><svg class="icon" aria-hidden="true"><use href="#icon-layers"/></svg><span>搭配灵感</span><span class="nav-dot" aria-hidden="true"></span></button>
+        <button type="button" class="nav-button" data-page="models"><svg class="icon" aria-hidden="true"><use href="#icon-person"/></svg><span>模特与 360</span><span class="nav-dot" aria-hidden="true"></span></button>
+        <button type="button" class="nav-button" data-page="about"><svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg><span>使用说明</span><span class="nav-dot" aria-hidden="true"></span></button>
+      </nav>
+      <div class="sidebar-foot"><span class="edition-tag">A LITTLE LESS, A LITTLE BETTER</span><p>好好穿，已经拥有的。<br>让每一件喜欢，都有新的可能。</p><span class="local-indicator"><i aria-hidden="true"></i>无需登录 · 本机使用</span></div>
+    </aside>
+
+    <main id="main-content" class="main-content" tabindex="-1">
+      <div class="topbar"><span class="topbar-path">我的空间 <i>/</i> <span id="nav-current-label">我的衣橱</span></span><span class="storage-indicator"><span class="status-dot" aria-hidden="true"></span><span id="storage-status" role="status">正在读取本机衣橱…</span></span></div>
+      <div class="page-content">
+        <header class="page-heading"><div><p class="eyebrow">YOUR PERSONAL WARDROBE</p><h1 id="app-title">我的衣橱</h1><p id="page-subtitle">从已经拥有的衣物开始，找到今天想穿的一套。</p></div><span class="page-badge"><svg class="icon" aria-hidden="true"><use href="#icon-heart"/></svg> 为喜欢的日常，留一点空间</span></header>
+
+        <section data-view="wardrobe" aria-label="我的衣橱">
+
+          <div class="wardrobe-hero">
+            <div class="hero-copy">
+              <span class="hero-kicker">LESS TO CHOOSE. MORE TO LOVE.</span>
+              <h2>穿喜欢的，<br>做自己。</h2>
+              <p>从你的衣橱里，发现新的可能。<br>让已经拥有的衣物，陪你过好每一天。</p>
+              <div class="hero-actions">
+                <button class="button button-primary" type="button" data-page="fitting">搭一套看看 <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+                <button class="button button-secondary" type="button" data-add-item><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg> 添加衣物</button>
+              </div>
+              <span class="hero-footnote"><i></i> 你的衣橱，你的风格，你的日常</span>
+            </div>
+            <div class="hero-visual">
+              <span class="hero-stamp" aria-hidden="true">THE EVERYDAY<br>COLLECTION<br><b>01 / 05</b></span>
+              <img class="hero-model" id="hero-model" alt="姜黄色上衣、米白外套和牛仔裤组成的日常穿搭示例">
+              <div class="hero-caption"><small>OUTFIT NOTES / 搭配手记</small><strong>一点暖色，刚刚好。</strong><span>米白 · 姜黄 · 靛蓝</span></div>
+              <span class="hero-side-note" aria-hidden="true">A WARDROBE THAT FEELS LIKE YOU.</span>
+            </div>
+          </div>
+          <div class="wardrobe-overview"><div class="stat"><span>件衣物，慢慢收好</span><strong id="item-count">0</strong></div><div class="stat"><span>种类别，随心组合</span><strong id="category-count">0</strong></div><div class="stat"><span>件收藏，常穿常爱</span><strong id="favorite-count">0</strong></div><div class="overview-note"><span class="mini-icon"><svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg></span><div><strong>让每一件，都被好好穿着</strong><p>从一件开始，建立自己的日常衣橱。</p></div></div></div>
+          <div class="collection-heading"><div><span class="eyebrow">THE COLLECTION</span><h2>收好每一件喜欢</h2></div><span id="visible-count" class="subtle-label"></span></div>
+          <div class="section-toolbar"><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><span class="visually-hidden">搜索衣物名称、类别或颜色</span><input id="search-input" type="search" placeholder="搜索名称、类别或颜色" autocomplete="off"></label><div class="collection-controls"><label class="sort-control"><span class="visually-hidden">衣物排序</span><select id="sort-items" aria-label="衣物排序"><option value="recent">按添加顺序</option><option value="name">按衣物名称</option><option value="category">按衣物类别</option></select></label><button id="add-item" type="button" class="button button-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加衣物</button></div></div>
+          <div id="filters" class="filter-list" role="group" aria-label="按衣物类别筛选">
+            <button type="button" class="filter-button active" data-filter="all" aria-pressed="true">全部</button><button type="button" class="filter-button" data-filter="top" aria-pressed="false">上衣</button><button type="button" class="filter-button" data-filter="outerwear" aria-pressed="false">外套</button><button type="button" class="filter-button" data-filter="bottom" aria-pressed="false">下装</button><button type="button" class="filter-button" data-filter="shoes" aria-pressed="false">鞋</button><button type="button" class="filter-button" data-filter="bag" aria-pressed="false">包</button><button type="button" class="filter-button" data-filter="favorites" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#icon-heart"/></svg>喜欢</button>
+          </div>
+          <div id="wardrobe-grid" class="wardrobe-grid"></div>
+          <div id="wardrobe-empty" class="empty-state" hidden><span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-shirt"/></svg></span><h2>还没有找到这件喜欢</h2><p>试试其他分类，或添加一张自己的衣物照片。</p></div>
+          <div class="backup-bar"><div><svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg><p><strong>喜欢的衣物，记得留一份备份</strong><span>换浏览器或换电脑前，记得导出一份备份。</span></p></div><div class="button-row"><button id="export-data" type="button" class="button button-quiet"><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>导出备份</button><label class="button button-quiet file-button"><svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg>导入备份<input id="import-data" class="visually-hidden" type="file" accept="application/json,.json" aria-label="导入衣橱 JSON 备份"></label></div></div>
+        </section>
+
+        <section data-view="fitting" aria-label="搭配试衣" hidden>
+          <div class="example-banner"><div><span class="pill">真实案例</span><p><strong>这一套，穿上刚刚好。</strong><span>载入示例搭配，可以查看这套衣物已完成的真人试穿图。</span></p></div><button id="load-example" type="button" class="button button-secondary">载入示例搭配<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button></div>
+          <div class="fitting-layout">
+            <section class="panel model-picker" aria-labelledby="model-picker-title"><div class="panel-heading"><h2 id="model-picker-title"><span class="step-number">01</span>选择人物</h2><span class="subtle-label">人物底图</span></div><label class="field-label" for="model-select">用于预览的人物</label><select id="model-select"><option value="">请选择人物</option></select><div class="fitting-model-stage"><img id="fitting-model-image" alt="选中的人物照片"></div><p class="hint">在「模特与 360」里，可以添加自己的清晰人物照片。</p></section>
+            <section class="panel garment-picker" aria-labelledby="garment-picker-title"><div class="panel-heading"><h2 id="garment-picker-title"><span class="step-number">02</span>组合衣物</h2><span id="selected-count" class="selection-count">0 / 5</span></div><p class="hint">上衣、外套、下装、鞋、包，每类选一件；重选同类会替换原来的选择。</p><div id="fitting-items" class="fitting-items"></div><div class="outfit-save"><label class="field-label" for="outfit-name">给这套搭配起个名字<span class="optional">选填</span></label><div class="save-row"><input id="outfit-name" type="text" maxlength="60" placeholder="例如：周末轻松出门"><button id="save-outfit" type="button" class="button button-secondary">保存搭配</button></div></div></section>
+          </div>
+          <div class="fitting-action-bar"><div><strong>把今天想穿的，先放在一起看</strong><p id="fitting-help" class="hint">选择自己的衣物后可以保存组合。真人试穿图仅提供已完成的真实案例。</p></div><div class="button-row"><button id="view-collage" type="button" class="button button-secondary">查看示例衣物原图</button><button id="show-result" type="button" class="button button-primary">查看实测效果<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button></div></div>
+          <section id="result-panel" class="panel result-panel" aria-labelledby="result-title" hidden><div class="panel-heading"><div><span class="eyebrow">已完成的真实试穿案例</span><h2 id="result-title">从人物原图，到一整套搭配</h2></div><a id="download-result" class="button button-secondary" download="爱衣橱-试穿.jpg"><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>下载效果图</a></div><div class="result-comparison"><figure><div class="result-image-wrap"><img id="result-before" alt="真实试穿案例的人物原图"></div><figcaption><span>01</span>人物原图</figcaption></figure><figure><div class="result-image-wrap"><img id="result-after" alt="已生成的真实试穿案例效果图"></div><figcaption><span>02</span>实测试穿效果</figcaption></figure></div><p id="result-description" class="result-description">图片是此前真实生成并保存的案例，可用于观察搭配外观。</p></section>
+          <div class="section-heading"><div><h2>保存的搭配</h2><p>把喜欢的组合留下，下次打开接着穿。</p></div></div><div id="saved-outfits" class="saved-outfits"></div>
+        </section>
+
+        <section data-view="models" aria-label="模特与 360" hidden>
+          <div class="section-heading"><div><h2>人物照片</h2><p>保存自己的人物照，为搭配预览选择一张合适的照片。</p></div><button id="add-model" type="button" class="button button-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加人物</button></div><div id="model-grid" class="model-grid"></div>
+          <section class="panel video-panel" aria-labelledby="video-title"><div class="panel-heading"><div><span class="eyebrow">用自己的真实视频查看</span><h2 id="video-title">360 转身展示</h2><p>导入一段转身视频，播放或拖动查看不同角度。展示范围取决于视频本身。</p></div><label class="button button-secondary file-button"><svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg>导入转身视频<input id="video-input" class="visually-hidden" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" aria-label="导入自己的 MP4 或 MOV 转身视频"></label></div>
+            <div id="video-empty" class="empty-state video-empty"><span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-play"/></svg></span><h3>放入一段自己的转身视频</h3><p>支持 MP4、MOV。建议选择全身清晰、缓慢转身的视频。</p><span class="subtle-label">本机播放，无需上传</span></div>
+            <div id="video-stage" class="video-stage" hidden><h3 id="video-label">我的转身视频</h3><div class="video-surface"><video id="rotation-video" playsinline preload="metadata" muted aria-label="导入的真实转身视频"></video></div><div class="video-controls"><button id="video-play" type="button" class="button button-secondary">播放</button><label class="video-progress"><span class="visually-hidden">拖动查看视频进度</span><input id="video-scrub" type="range" min="0" max="1000" value="0" step="1"></label><output id="video-time" class="video-time">0:00 / 0:00</output><button id="video-clear" type="button" class="button button-quiet">移除视频</button></div></div>
+            <p class="video-note"><svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg>这里展示真实视频画面。自动生成转身视频，需要完整版的 AI 服务。</p>
+          </section>
+        </section>
+
+        <section data-view="about" aria-label="使用说明" hidden>
+          <div class="about-intro"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-shirt"/></svg></span><div><span class="eyebrow">爱衣橱 · 暖奶茶网页版</span><h2>打开一个文件，试着用好自己的衣服。</h2><p>这是一份可以直接转发的体验页面。无需安装、无需登录，先从整理一件衣物、组合一套搭配开始。</p></div></div>
+          <div class="about-grid"><section class="panel about-card"><span class="about-icon"><svg class="icon" aria-hidden="true"><use href="#icon-shirt"/></svg></span><h3>现在就能做的事</h3><ul class="check-list"><li>上传自己的衣物照片，填写名称、类别和颜色</li><li>搜索、编辑、收藏，整理个人衣橱</li><li>选择上衣、外套、下装、鞋和包，保存搭配</li><li>查看内置的真实试穿案例，下载效果图</li><li>添加人物照片，导入自己的转身视频查看</li></ul></section>
+          <section class="panel about-card"><span class="about-icon"><svg class="icon" aria-hidden="true"><use href="#icon-layers"/></svg></span><h3>关于 AI 试穿</h3><p>体验版展示的是此前已经生成的真实案例。更换你自己的衣物后，可以组合并保存搭配。</p><p>自动识别衣物、生成新的真人试穿图、生成转身视频，需要连接完整版的 AI 服务。</p><div class="plain-note">这个文件不连接云端 AI，也不含任何 API 密钥。</div><p class="hint">试穿图用于观察搭配外观，具体尺码和穿着松紧仍需要实际试穿确认。</p></section>
+          <section class="panel about-card"><span class="about-icon"><svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg></span><h3>我的衣物存在哪里？</h3><p>你添加的衣物、人物照片和搭配只保存在当前浏览器，不会自动同步到其他设备。</p><p>在「我的衣橱」底部点击「导出备份」，会得到一份 JSON 备份文件。换浏览器或电脑时，再点击「导入备份」即可恢复。</p><p class="hint">清理浏览器数据可能删除本机衣橱。若浏览器提示无法保存，请先导出备份。体验版最多保存 500 件衣物、40 张人物图、100 套搭配，图片与资料合计不超过 50 MB。</p></section>
+          <section class="panel about-card"><span class="about-icon"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></span><h3>怎么发给朋友体验？</h3><ol class="number-list"><li>把这份 HTML 文件直接发给对方。</li><li>下载文件后，使用浏览器打开。</li><li>先看内置示例，再添加自己的照片和衣物。</li></ol><p class="hint">转发 HTML 文件会分享内置案例。你后来添加的内容留在自己的浏览器里。要分享自己的衣橱，请同时发送导出的备份文件。</p><p class="hint">部分聊天软件只能预览文件，若按钮无法操作，请下载后用浏览器打开。</p></section></div>
+        </section>
+      </div>
+      <footer class="app-footer"><span>爱衣橱 <i aria-hidden="true">·</i> 好好穿，已经拥有的。</span><span>本机保存 · 可导出备份</span></footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+  <noscript><div class="noscript-note">请允许浏览器运行 JavaScript，才能使用衣橱整理和搭配功能。</div></noscript>
+
+  <dialog id="item-dialog" class="form-dialog" aria-labelledby="item-dialog-title"><div class="dialog-heading"><div><span class="eyebrow">我的衣橱</span><h2 id="item-dialog-title">衣物信息</h2></div><button type="button" class="icon-button" data-close-dialog aria-label="关闭衣物表单"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button></div><p class="dialog-description">保存一件真实衣物，慢慢建立自己的衣橱。</p><form id="item-form"><input id="item-id" type="hidden"><div class="upload-field"><img id="item-preview" class="form-preview" alt="衣物照片预览"><label class="upload-label"><svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg><strong>选择衣物照片</strong><span>JPG、PNG 或 WebP</span><input id="item-image-input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="选择衣物照片"></label></div><label class="field-label" for="item-name">衣物名称</label><input id="item-name" type="text" required maxlength="60" placeholder="例如：奶白色针织开衫"><div class="form-row"><div><label class="field-label" for="item-category">类别</label><select id="item-category"><option value="top">上衣</option><option value="outerwear">外套</option><option value="bottom">下装</option><option value="shoes">鞋</option><option value="bag">包</option></select></div><div><label class="field-label" for="item-color">颜色<span class="optional">选填</span></label><input id="item-color" type="text" maxlength="24" placeholder="例如：奶白色"></div></div><label class="field-label" for="item-notes">备注<span class="optional">选填</span></label><textarea id="item-notes" maxlength="400" rows="3" placeholder="记下材质、版型，或适合它的场合"></textarea><p id="item-form-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="item-delete" type="button" class="button button-danger" hidden>删除衣物</button><div class="button-row"><button type="button" class="button button-secondary" data-close-dialog>取消</button><button id="item-save" type="submit" class="button button-primary">保存衣物</button></div></div></form></dialog>
+
+  <dialog id="model-dialog" class="form-dialog" aria-labelledby="model-dialog-title"><div class="dialog-heading"><div><span class="eyebrow">我的人物照片</span><h2 id="model-dialog-title">添加人物</h2></div><button type="button" class="icon-button" data-close-dialog aria-label="关闭人物表单"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button></div><p class="dialog-description">建议使用单人、全身清晰、身体无遮挡的照片。</p><form id="model-form"><div class="upload-field"><img id="model-preview" class="form-preview person-preview" alt="人物照片预览"><label class="upload-label"><svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg><strong>选择人物照片</strong><span>JPG、PNG 或 WebP</span><input id="model-image-input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="选择人物照片"></label></div><label class="field-label" for="model-name">人物名称</label><input id="model-name" type="text" required maxlength="60" placeholder="例如：我的日常模特"><p id="model-error" class="form-error" role="alert"></p><div class="dialog-actions"><span></span><div class="button-row"><button type="button" class="button button-secondary" data-close-dialog>取消</button><button id="model-save" type="submit" class="button button-primary">保存人物</button></div></div></form></dialog>
+
+  <dialog id="image-dialog" class="image-dialog" aria-labelledby="image-dialog-title"><div class="dialog-heading"><h2 id="image-dialog-title">图片预览</h2><button type="button" class="icon-button" data-close-dialog aria-label="关闭图片预览"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button></div><div class="image-dialog-stage"><img id="image-dialog-image" alt="当前查看的图片"></div><div class="image-dialog-actions"><a id="image-dialog-download" class="button button-primary" download><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>下载图片</a><button type="button" class="button button-secondary" data-close-dialog>关闭</button></div></dialog>
+  <script id="aiyi-seed" type="application/json">__DATA__</script>
+  <script>/*__SCRIPT__*/</script>
+</body>
+</html>
