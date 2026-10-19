@@ -1,0 +1,113 @@
+from typing import Any
+
+from fastapi import APIRouter
+from sqlalchemy import text
+
+from app.config import get_settings
+from app.database import DbSession
+from app.services.ai_service import get_ai_service
+from app.services.background_removal import get_provider
+
+router = APIRouter()
+
+
+@router.get("/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "healthy"}
+
+
+@router.get("/capabilities")
+async def capabilities() -> dict[str, Any]:
+    """Report effective AI capabilities for external agents.
+
+    `ai.*` — whether the internal AI capability is active. `false` means the backend
+    is deferring that work to an external agent.
+    `features.*` — whether the write-back endpoint for that capability exists and
+    accepts agent-authored results. `false` until the endpoint lands.
+    Public / no-auth: leaks no user data.
+    """
+    settings = get_settings()
+    result = {
+        "ai": {
+            "vision": settings.effective_ai_vision_enabled,
+            "text": settings.effective_ai_text_enabled,
+        },
+        "features": {
+            "external_tagging": True,
+            "external_suggestions": True,
+            "external_pairings": True,
+        },
+        "version": "1.0.0",
+    }
+    if settings.local_development:
+        result["mode"] = "local-framework"
+        result["features"].update({
+            "background_jobs": True,
+            "clothing_recognition": True,
+            "ai_configuration": True,
+            "body_image_generation": False,
+            "virtual_try_on": True,
+            "preference_learning": False,
+        })
+        result["features"]["ai_configuration_required"] = True
+    return result
+
+
+@router.get("/health/ready")
+async def readiness_check(db: DbSession) -> dict[str, Any]:
+    checks = {
+        "database": "unhealthy",
+    }
+
+    try:
+        await db.execute(text("SELECT 1"))
+        checks["database"] = "healthy"
+    except Exception as e:
+        checks["database"] = f"unhealthy: {str(e)}"
+
+    overall = "healthy" if all(v == "healthy" for v in checks.values()) else "unhealthy"
+
+    return {
+        "status": overall,
+        "checks": checks,
+    }
+
+
+@router.get("/health/features")
+async def feature_check() -> dict[str, Any]:
+    features: dict[str, Any] = {
+        "max_upload_size_mb": get_settings().max_upload_size_mb,
+        "max_bulk_upload_count": get_settings().max_bulk_upload_count,
+    }
+    if get_settings().local_development:
+        features["background_removal"] = False
+        return features
+    try:
+        get_provider()
+        features["background_removal"] = True
+    except Exception:
+        features["background_removal"] = False
+    return features
+
+
+@router.get("/health/ai")
+async def ai_health_check() -> dict[str, Any]:
+    if not get_settings().ai_enabled:
+        return {"status": "disabled", "endpoints": []}
+
+    ai_service = get_ai_service()
+    raw = await ai_service.check_health()
+
+    sanitized_endpoints = []
+    for ep in raw.get("endpoints", []):
+        sanitized_endpoints.append(
+            {
+                "name": ep.get("name"),
+                "status": ep.get("status"),
+            }
+        )
+
+    return {
+        "status": raw.get("status", "unknown"),
+        "endpoints": sanitized_endpoints,
+    }

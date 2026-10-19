@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>爱衣橱第一版功能与技术方案</title>
+<style>
+:root{color-scheme:light dark;--bg:#faf9f6;--ink:#252a28;--sub:#5b6460;--line:#d9ded9;--accent:#245b48;--panel:#edf2ed}@media(prefers-color-scheme:dark){:root{--bg:#171c19;--ink:#e4e9e4;--sub:#afb9b1;--line:#3b473e;--accent:#a2d0b5;--panel:#232e26}}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.8 system-ui,-apple-system,"PingFang SC",sans-serif}main{max-width:1120px;margin:auto;padding:48px 32px 80px}h1{font-size:30px;line-height:1.4;margin:0 0 12px}h2{font-size:23px;margin:48px 0 16px}h3{font-size:18px;margin:28px 0 8px}p{margin:12px 0}a{color:var(--accent);text-underline-offset:4px}.meta,small{color:var(--sub)}.lead{font-size:19px;max-width:850px}.note{background:var(--panel);padding:18px 22px;margin:24px 0}nav{display:flex;flex-wrap:wrap;gap:8px 22px;border-block:1px solid var(--line);padding:18px 0;margin:28px 0}.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:12px 10px;min-width:95px}th{color:var(--accent);font-weight:650}td:first-child{font-weight:600}ul,ol{padding-left:24px}li{margin:7px 0}code{overflow-wrap:anywhere;font-size:.9em}.flow{padding:20px;background:var(--panel);line-height:2.2;white-space:pre-wrap}section{scroll-margin-top:20px}@media(max-width:640px){main{padding:26px 18px}h1{font-size:25px}h2{font-size:21px}table{min-width:700px}}@media print{nav{display:none}body{font-size:11px}main{padding:0}h2{break-after:avoid;margin-top:26px}tr{break-inside:avoid}.scroll{overflow:visible}table{font-size:10px;min-width:0!important}a{color:inherit}}
+</style>
+</head>
+<body><main>
+<h1>爱衣橱第一版功能与技术方案</h1>
+<p class="meta">方案建议稿 · 2026年10月15日 · 面向网页端 · 开源能力已查公开资料，模型效果与成本尚待实测</p>
+<p class="lead">用用户自己的衣服，推荐愿意穿的搭配，并展示接近个人体型的上身预览。</p>
+<p>推荐采用开源 Web 框架和图片处理组件搭建产品，使用多模态模型识别衣物、辅助搭配，使用 GPT Image 验证身材底图与上衣加裤子的组合预览。衣橱、推荐约束、偏好、数据关联和生成任务管理由团队开发。第一版不训练基础模型，不依赖尚未完成授权核对的 VTON 默认管线上线。</p>
+<nav aria-label="目录"><a href="#scope">产品边界</a><a href="#features">完整功能</a><a href="#flows">用户流程</a><a href="#ai">三条 AI 链路</a><a href="#reuse">开源与自研</a><a href="#arch">架构</a><a href="#data">数据与接口</a><a href="#release">实施顺序</a><a href="#acceptance">验收与成本</a><a href="#sources">来源</a></nav>
+
+<section id="scope"><h2>一 产品边界与第一版目标</h2>
+<p><strong>第一版只证明一件事：</strong>用户录入自己的上衣和裤子后，能够选出一套愿意穿的搭配，并获得保留这两件衣物主要特征的个人体型预览。</p>
+<p>默认先覆盖日常休闲与通勤，固定正面成人模特；具体首发人群与风格作为上线前的产品决策，不假定男装、女装的效果可以互相替代。网页适配手机浏览器，方便拍照入库。</p>
+<ul><li><strong>衣物管理：</strong>上衣、裤子为核心；裙装、外套、鞋可登记、收藏并出现在单品搭配图中。</li><li><strong>推荐范围：</strong>第一版主链是上衣加裤子，鞋和外套可作为补充。衣橱缺少类别时如实提示。</li><li><strong>真人预览范围：</strong>先支持上衣加裤子的两件组合；裙装、外套叠穿、鞋包替换不计入本版承诺。用户在生成前就能看到该范围。</li><li><strong>身材表达：</strong>身材相近的视觉参考，不承诺厘米级复现、真实尺码判断或面料物理仿真。体重与围度不直接等同于二维轮廓。</li></ul>
+<p>不纳入首版：购买导购和电商抓取、社交社区、真人照片换脸、三维人体、视频、多角度、自动判断松紧、尺码推荐、模型训练与大型推荐系统。天气先允许手动选择冷热和雨晴，自动天气接入作为可延后项。</p></section>
+
+<section id="features"><h2>二 第一版完整功能清单</h2>
+<p>下列“自研”是业务与集成开发，通常可用成熟库完成基础能力，不表示从零写登录、数据库或图像算法。</p>
+<div class="scroll"><table><thead><tr><th>编号与模块</th><th>用户可用功能</th><th>实现方式与自研边界</th><th>关键异常或验收点</th></tr></thead><tbody>
+<tr><td>F01 账户</td><td>注册登录、退出、个人数据删除入口</td><td>接入一个成熟身份服务；自研用户资料、会话集成、资源归属权限</td><td>用户无法查看其他人的衣物、底图和任务；删除请求停止后续任务</td></tr>
+<tr><td>F02 初次使用</td><td>选择常穿风格、使用场景、避开颜色；可跳过身材填写</td><td>自研偏好表单与默认策略</td><td>衣橱为空时引导上传；体验示例明确标注为示例衣橱</td></tr>
+<tr><td>F03 衣物上传</td><td>拍照或选图、裁剪、旋转、多张图片逐件处理</td><td>浏览器图片操作库＋服务端校验；自研上传流程与衣物草稿</td><td>每张图一件衣物；多件、模糊、遮挡输入引导重传；禁止静默丢弃</td></tr>
+<tr><td>F04 识别入库</td><td>识别类别、主色、图案、可见版型；确认和修改后入库</td><td>多模态 API；可选 BiRefNet 抠图；自研标签体系与人工纠正流程</td><td>材质成分、弹性、厚薄不确定时留空或标待确认；原图长期关联</td></tr>
+<tr><td>F05 我的衣橱</td><td>分类浏览、颜色筛选、详情编辑、收藏、删除、设为暂不可穿</td><td>自研业务；缩略图与数据存储复用基础组件</td><td>洗涤或暂不可穿衣物不参与推荐；删除后旧搭配标记单品失效</td></tr>
+<tr><td>F06 我的身材</td><td>选择模特、身材类型、身高体重；围度与比例选填</td><td>GPT Image 编辑＋自研数据转描述、模特素材库</td><td>不以 BMI 自动决定体型；支持不填尺寸直接选标准底图</td></tr>
+<tr><td>F07 底图确认</td><td>查看候选、调宽肩或腰腹等视觉特征、确认并保存版本</td><td>图像 API；自研版本管理与确认状态</td><td>脸、发型、姿态、背景需要检查；未确认候选不覆盖当前底图</td></tr>
+<tr><td>F08 今日搭配</td><td>选择场景、冷热、风格，获得最多三套搭配及简短理由</td><td>自研硬约束与排序＋大模型辅助组合</td><td>有多少有效组合展示多少；缺裤子时引导补充，不能编造衣物</td></tr>
+<tr><td>F09 围绕单品搭配</td><td>固定一条裤子或一件上衣，寻找搭配</td><td>自研锁定槽位与候选筛选；大模型提供搭配建议</td><td>锁定单品不能被模型替换；候选不够时说明原因</td></tr>
+<tr><td>F10 调整推荐</td><td>换一件、保留其他单品；更休闲或更正式；排除本次不想穿的衣服</td><td>自研局部重选与偏好约束</td><td>更新组合后旧预览标记不对应当前搭配，不能直接复用</td></tr>
+<tr><td>F11 搭配展示</td><td>先看实际单品拼图，查看每件原图与信息</td><td>浏览器布局或服务端图片合成；自研组合界面</td><td>不通过生成模型重画拼图里的商品；不把拼图称为真人试穿</td></tr>
+<tr><td>F12 上身预览</td><td>用户选中上衣加裤子后按需生成，放大、对照、重试、下载</td><td>GPT Image 主候选；自研多图输入、质量检查与结果绑定</td><td>两件必须同时保留；生成失败保留单品搭配图，明确显示失败原因</td></tr>
+<tr><td>F13 任务与额度</td><td>排队、生成中、完成、失败状态；刷新可恢复；显示剩余额度</td><td>开源任务队列＋自研任务状态、去重、限额和费用流水</td><td>重复点击不重复创建同一任务；取消后可能无法撤销已发生的上游费用</td></tr>
+<tr><td>F14 收藏与反馈</td><td>收藏搭配、标记今天穿了、不喜欢及原因、查看历史</td><td>自研收藏、穿着记录和偏好更新</td><td>推荐反馈与成图失真反馈分开；不喜欢图片不等于不喜欢该衣服</td></tr>
+<tr><td>F15 最小管理后台</td><td>任务故障、失败类别、调用成本、额度配置、模型与提示词版本管理</td><td>自研轻量后台及日志监控集成</td><td>故障追踪默认用资源 ID；查看用户图片需要受限权限</td></tr>
+</tbody></table></div>
+<p><strong>页面结构：</strong>首页“今天怎么穿”；我的衣橱及单品详情；搭配结果与试衣间；收藏与历史；我的身材和设置。管理后台单独限制访问。</p></section>
+
+<section id="flows"><h2>三 三条用户流程</h2>
+<h3>第一次使用</h3><p>登录 → 设置少量风格偏好 → 上传几件上衣与裤子 → 确认识别结果 → 选择标准模特或生成个人底图 → 获得搭配 → 查看单品组合 → 按需生成预览 → 收藏。底图生成不阻塞衣橱与推荐功能。</p>
+<h3>每天使用</h3><p>选择场景与冷热 → 查看已有衣物组成的推荐 → 换一件或保留喜欢的组合 → 查看预览 → 标记今天穿了。若有最新可用天气信息，可代填条件并允许用户修改。</p>
+<h3>围绕一件衣服</h3><p>打开裤子详情 → 点击“帮我搭配” → 锁定裤子 → 推荐候选上衣 → 用户替换与收藏 → 生成所选组合预览。所有入口共用同一推荐接口，不做两个独立推荐系统。</p></section>
+
+<section id="ai"><h2>四 三条 AI 链路</h2>
+<h3>A 衣物识别与整理</h3><ol><li>校验文件实际格式、大小和尺寸，标准化方向，移除无关 EXIF 信息；原图与派生图分开存储。</li><li>先检查是否为单件、主体是否完整。首发以平铺或清晰单件商品图为主要支持输入；真人穿着图仅在验证通过后开放，复杂背景不承诺自动抽取。</li><li>多模态模型返回受约束的结构化字段：类别、主色、图案、领型、袖长、裤型、可见风格、需用户确认项。</li><li>可选抠图只用于缩略图与拼图。抠图失败可以回退到裁剪原图；不补画被遮挡的图案，不覆盖原始衣物。</li><li>用户确认后成为可推荐衣物。用户修改优先于后续自动标签。</li></ol>
+<h3>B 从个人衣橱生成推荐</h3><ol><li>从服务端身份确定用户，读取其已确认且可穿衣物，按场景、温度与明确禁忌筛选。</li><li>按上衣和裤子形成候选。第一版从结构化标签与业务规则开始，不强制引入向量数据库。</li><li>向模型提供有限候选的图片、标签和 ID，要求输出衣物 ID、槽位与一句理由；锁定单品与排除项作为硬条件。</li><li>服务端验证归属、存在性、类别、可穿状态、锁定项和去重。无效输出有限重试，之后用可解释规则兜底；无合理组合则提示补充衣物。</li><li>记录曝光、收藏、替换、实际穿着与负反馈。早期以用户明确偏好和最近行为调整排序，不宣称已经训练出个性化模型。</li></ol>
+<p><strong>FashionCLIP 是可选的图文检索组件，不等于穿搭推荐器。</strong>相似的两件衣服不必然适合搭在一起。需要检索时再加 FashionCLIP 与 pgvector，中文查询可先使用经核对的英文标签映射，并单独评测。</p>
+<h3>C 身材底图与上身预览</h3><ol><li>准备授权明确、同姿势同背景、穿贴身基础服装的成人模特模板。用户数据先转换成比例与轮廓描述，再请求编辑；不把输入围度直接写成已实现的成图测量值。</li><li>生成少量候选，用户确认。保存模板、身体资料版本、底图图片、模型与提示词版本。</li><li>组合预览输入为已确认底图、上衣原图、裤子原图与对应槽位。鞋与外套即便出现在推荐里，也明确不属于该次真人预览范围。</li><li>优先测试一次多图编辑完成两件换装。顺序换装仅作为实验备选，第二步必须重新核查第一件；不能把单件测试成绩当成组合成绩。</li><li>每次新的搭配以已确认底图为人物来源。已生成的试穿图不成为新的身材底图。固定随机种子也不能当作身份锁定保证。</li><li>检查两件衣物主要特征、脸、发型、姿势、轮廓、遮挡和残留原衣；自动检查只作筛查，固定样本由人工复核。复杂文字印花先标记实验支持或限制输入。</li><li>失败允许有限重试，保留单品图和原图对照。结果展示 AI 预览标识，不由生成图给出实际尺码结论。</li></ol>
+<p>GPT Image 支持参考图片编辑，但人物一致性与遮罩精度存在限制，必须用实际输入建立验收数据集。<a href="https://developers.openai.com/api/docs/guides/image-generation">OpenAI 官方说明</a></p></section>
+
+<section id="reuse"><h2>五 开源项目 API 与自研的明确分工</h2>
+<div class="scroll"><table><thead><tr><th>能力或项目</th><th>现成能力及许可标注</th><th>第一版决策</th><th>仍需团队开发</th></tr></thead><tbody>
+<tr><td><a href="https://github.com/vercel/next.js">Next.js</a></td><td>React 网页框架；MIT</td><td>采用，构建响应式网页</td><td>全部页面、上传体验、业务状态与任务展示</td></tr>
+<tr><td><a href="https://github.com/fastapi/fastapi">FastAPI</a></td><td>Python API 框架；MIT</td><td>采用，便于统一模型服务</td><td>业务接口、权限、数据校验与模型适配</td></tr>
+<tr><td><a href="https://github.com/celery/celery">Celery</a></td><td>后台任务队列；New BSD</td><td>采用；搭配 RabbitMQ，业务状态落 PostgreSQL</td><td>任务幂等、上游结果核对、取消、额度结算和故障恢复</td></tr>
+<tr><td><a href="https://github.com/rabbitmq/rabbitmq-server">RabbitMQ</a></td><td>消息代理；仓库 MPL-2.0 标注</td><td>队列基础设施，优先托管部署</td><td>队列配置、告警与消息恢复；不作为业务状态唯一来源</td></tr>
+<tr><td><a href="https://github.com/ZhengPeng7/BiRefNet">BiRefNet</a></td><td>前景分割；仓库及对应官方模型卡 MIT</td><td>可选首发组件，锁定模型 revision；不阻塞入库</td><td>裁剪、批处理、边缘检查、失败回退；它不负责细粒度衣物语义分类</td></tr>
+<tr><td><a href="https://github.com/danielgatis/rembg">rembg</a></td><td>背景去除封装；代码 MIT，具体模型独立授权</td><td>可用其封装接 BiRefNet；与直接接入二选一，不默认接受自动选择的模型</td><td>固定模型、许可清单、图片流程与回退</td></tr>
+<tr><td><a href="https://github.com/patrickjohncyh/fashion-clip">FashionCLIP</a></td><td>服饰图文表征与检索；仓库及所查模型卡 MIT</td><td>后续检索优化候选，第一版非必需</td><td>中文适配、召回评测、搭配约束与个性化排序</td></tr>
+<tr><td><a href="https://github.com/pgvector/pgvector">pgvector</a></td><td>PostgreSQL 向量检索扩展；PostgreSQL License</td><td>检索需要时再加，先用普通 SQL</td><td>向量生成、用户隔离过滤、索引策略与检索质量</td></tr>
+<tr><td>多模态识别与推荐 API</td><td>外部付费模型服务，不属于开源代码</td><td>先选一个支持图像与结构化输出且可合法接入的服务商</td><td>标签 Schema、候选筛选、ID 校验、规则兜底、评测与偏好</td></tr>
+<tr><td><a href="https://developers.openai.com/api/docs/guides/image-generation">GPT Image</a></td><td>图像生成与多图编辑 API；非开源模型</td><td>身材编辑与组合预览的首选验证路线，具体模型 ID 由评测后配置</td><td>身材描述、素材输入、底图版本、组合控制、质量与费用管理</td></tr>
+<tr><td><a href="https://github.com/fashn-AI/fashn-vton-1.5">FASHN VTON 1.5</a></td><td>人物图加衣物图试穿；主代码和主权重 Apache-2.0</td><td>研发评测候选，默认整套管线不直接进入商用首发</td><td>核对并处理 Human Parser 依赖授权；GPU 服务；两件组合与身份一致性评测</td></tr>
+<tr><td><a href="https://github.com/franciszzj/Leffa">Leffa</a></td><td>试穿与姿态迁移；仓库及所查官方模型卡 MIT</td><td>第二个自部署评测候选，核对完整依赖后再决定</td><td>预处理、模型权重清单、GPU 部署、组合换装验证</td></tr>
+<tr><td><a href="https://github.com/QwenLM/Qwen-Image">Qwen-Image-Edit-2509</a></td><td>通用多图编辑；该具体版本模型卡 Apache-2.0</td><td>自部署通用编辑备选，不直接替代 GPT Image</td><td>显存与延迟评测、人物衣物保真、服务化；不同版本独立核查授权</td></tr>
+<tr><td>个人衣橱与推荐产品</td><td>上述项目不提供完整业务闭环</td><td><strong>核心自研</strong></td><td>衣物资产、偏好、场景、搭配记录、推荐约束、反馈、版本和任务关联</td></tr>
+</tbody></table></div>
+<p><strong>FASHN 的依赖限制需要单独解决。</strong><a href="https://github.com/fashn-AI/fashn-human-parser/blob/main/LICENSE">Human Parser 许可证</a>指向 SegFormer 的 NVIDIA 许可证，后者含非商业用途条款。<a href="https://github.com/fashn-AI/fashn-vton-1.5/blob/main/src/fashn_vton/pipeline.py">默认 pipeline</a>在 segmentation_free 模式下仍调用 parser，因此只打开这个开关不能视为已移除该依赖。换成通用抠图模型也不能直接替代人体部位语义解析，需要按接口和标签重新实现与验证。</p>
+<p>CatVTON、IDM-VTON、OOTDiffusion 公布的许可带非商业限制，保留为研究参考，不列入默认商业部署。若考虑它们，需要另获适用授权。发布时固定代码 commit、模型 revision 与依赖清单，模型卡标识不能替代完整条款核对。</p>
+<p>FASHN 官方模型卡报告输出 576×864、约 8GB 推理显存，也承认体型保持不完美与原衣残留。这些是作者报告，不是本产品的性能承诺。放大输出不能恢复原图已经丢失的服装细节。<a href="https://huggingface.co/fashn-ai/fashn-vton-1.5">官方模型卡</a></p></section>
+
+<section id="arch"><h2>六 推荐系统架构与部署</h2>
+<div class="flow" role="img" aria-label="爱衣橱系统架构：网页调用业务 API，数据库保存业务状态，消息队列驱动后台模型任务，对象存储保存图片">用户浏览器　Next.js
+　↓ 登录态、上传授权、衣橱与搭配请求
+业务 API　FastAPI
+　├─ PostgreSQL：用户、衣物、底图、搭配、任务、额度、反馈
+　├─ 私有对象存储：原图、抠图、缩略图、底图、预览图
+　└─ RabbitMQ → Celery Worker
+　　　　　　　　├─ 图片整理与可选 BiRefNet
+　　　　　　　　├─ 多模态识别与搭配 API
+　　　　　　　　└─ GPT Image Adapter
+　　　　　　　　　　后续可接 VTON GPU Worker
+浏览器轮询任务接口 ← 数据库中的明确任务状态</div>
+<p>初期保持一个业务服务与独立 worker，不拆成大量微服务。生产使用 HTTPS、托管数据库、私有对象存储、消息队列与备份。API 路线不需要常驻生成模型 GPU；本地抠图仍需评测 CPU/GPU 开销，也可暂时保留裁剪图。</p>
+<p>建立三类独立适配接口：<code>classifyGarment</code>、<code>recommendOutfits</code>、<code>generatePreview</code>，另有 <code>generateBodyBase</code>。供应商变更不改变衣橱和搭配业务结构。接口统一不代表不同模型支持相同衣物类别或组合能力，要保存能力声明并由前端限制入口。</p>
+<p>API 密钥只在服务端。图片以短时签名链接或服务端传输交给供应商；所有上传与下载先验证资源归属。上线部署地区、模型服务可用地区、数据处理条款和天气服务授权需要在选定服务商后核对，不假定某地区一定可直接调用。</p>
+<p>登录优先接入一个已有托管身份服务，团队负责用户与业务数据的关联。短信、邮箱、社交登录先选择一种正式支持方式，其他入口后续扩展；服务商和计费是待定配置，不在本稿编造。</p></section>
+
+<section id="data"><h2>七 核心数据与接口边界</h2>
+<ul><li><code>UserProfile</code>：用户、偏好、场景与可选城市；<code>BodyProfile</code>：身体参数及版本，和普通推荐偏好分开。</li><li><code>MediaAsset</code>：owner、对象地址、类型、校验值、派生来源、删除状态、保留策略。</li><li><code>Garment</code>：owner、原图、缩略图、类别、标签、人工修改、版本、可穿状态和确认状态。</li><li><code>ModelTemplate / BodyBaseVersion</code>：素材授权记录、身体资料版本、图片、确认状态、模型与提示词版本。</li><li><code>Outfit / OutfitItem</code>：推荐上下文、理由、各槽位衣物 ID 及版本；不以文字名称代替关联。</li><li><code>GenerationJob / Preview</code>：底图版本、衣物版本、模型配置、输入快照哈希、请求 ID、状态、结果和检查结论。</li><li><code>Feedback / WearLog</code>：推荐反馈、成图反馈、穿着时间，分开记录。</li><li><code>QuotaLedger / ModelRun</code>：额度预占与释放、实际计费、供应商任务状态、幂等键与失败类别。</li></ul>
+<p>最小接口集合：上传授权与提交、衣物 CRUD、身体资料与底图生成确认、推荐搭配、替换槽位、创建与查询预览任务、收藏、反馈、穿着记录、删除个人数据。推荐和替换都必须重新检查衣物归属与当前状态。</p>
+<p>任务状态建议为 queued → running → succeeded / failed / cancelled，并为上游超时增加 unknown 状态进行结果核对。上游超时不等于未计费；不能立即重复调用。worker 重复投递时依赖数据库幂等锁与供应商请求标识恢复。</p>
+<p>去重键包含用户、底图版本、衣物 ID 与版本、模型、提示词和生成配置；用户主动“再生成”创建新尝试 ID。衣物或底图更新后旧结果可作为历史查看，但不显示为当前搭配预览。删除衣物、图片或账户后，阻止任务继续发布结果；按策略清理数据库、对象存储与派生文件，并处理备份保留期限。</p></section>
+
+<section id="release"><h2>八 实施顺序与研发分工</h2>
+<p>以下是实施关卡，合起来构成第一版，没有编造工期和人数。通过标准未达成时修正对应能力，不把技术演示直接作为公开发布。</p>
+<ol><li><strong>先验证组合预览。</strong>使用授权测试素材比较 GPT Image 与许可允许的备选，分别验证单件、上衣加裤子、不同体型；评估延迟与可用结果成本。前端同时完成流程原型，服务端建立资源与任务模型。</li><li><strong>完成衣橱和推荐。</strong>上传、识别确认、CRUD、真实 ID 推荐、锁定与替换、单品拼图、收藏与反馈形成可用闭环。生成未就绪也能完整体验选搭配。</li><li><strong>接入身材与预览。</strong>底图确认和版本、两件组合、任务状态、限额、重试、原图对照与结果检查全部接入。</li><li><strong>小范围真实使用。</strong>检查用户是否愿意录入和实际采用推荐，按失败类型修正。若组合预览未达标，明确保留为实验能力；此时不能宣称原定完整版已验收。</li></ol>
+<p><strong>角色分工：</strong>产品与设计定义首发人群、标签、场景、异常文案和判断样本；前端负责入库、衣橱、搭配和任务体验；服务端负责权限、数据、规则、队列、额度与适配；AI 工程负责提示词、质量评测和可选 GPU 服务；测试与运维负责权限隔离、任务恢复、备份与成本告警。可由同一人兼任，不预设团队编制。</p>
+<p><strong>资源不足时的削减顺序：</strong>自动天气 → 图文向量检索 → 次要风格入口 → 衣物批量处理便利功能 → 更多模特模板。优先保留衣橱真实关联、推荐换件、两件组合验证、失败反馈和数据权限。不能通过省掉业务校验换取“看起来已经能推荐”。</p></section>
+
+<section id="acceptance"><h2>九 验收指标与成本口径</h2>
+<p>下面的数量和阈值是建议测试口径，不是实测成绩，也不是行业标准；在首发人群与预算明确后可以调整。</p>
+<h3>功能与权限必须通过</h3><ul><li>推荐衣物归属、存在性、类别与锁定约束通过率 100%；无有效候选时不生成虚构衣物。</li><li>相同提交在并发点击与队列重放时只创建一次业务任务；上游超时进入核对流程。失败额度与实际服务商费用分账记录。</li><li>跨用户资源访问、删除后结果发布、旧搭配绑定错图、刷新丢任务等关键案例全部通过。</li></ul>
+<h3>图像质量单独验收</h3><p>建立 5 种测试体型 × 10 套上衣裤子组合的 50 组固定输入，每组至少生成两次，共 100 次。覆盖深浅颜色、条纹、印花、宽松与修身；文字和复杂材质另外分组。另测同一模特编辑前后的脸、姿势与背景一致性，以及长袖换短袖等原衣残留案例。</p>
+<p>每张图同时满足两件衣物主色、领口袖长、裤型、主要图案正确，且无明显人脸、肢体、姿态或体型漂移，才算可用。衣服穿上后轮廓会受版型影响，不以外轮廓像素相等判定体型相同。建议普通支持样本首次可用率达到 80% 再进入小范围验证；同时报告最多两次尝试的可用率、每类表现与尾部等待时间，不能只选最佳展示图。</p>
+<h3>推荐价值单独验收</h3><p>建议邀请 10 位目标用户各录入至少 5 件上衣和 5 条裤子，在衣橱与天气允许时进行 3 次真实场景任务。观察录入完成率、修改标签负担、至少一套愿意穿的会话占比、换件率、收藏与实际穿着。可以暂以 70% 会话能选出一套愿意穿的搭配作为试运行目标；成图漂亮不能替代该指标。</p>
+<h3>成本先测量再决定收费</h3><p>每张可用预览成本 = 全部生成尝试、失败重试、检查、图片处理及分摊基础设施费用 ÷ 可用预览张数。另记入库识别成本、一次推荐成本、底图生成成本、存储与流量。自部署还要计入 GPU 空闲、冷启动、运维和许可成本。</p>
+<p>先显示单品拼图，用户点击后才生成真人预览；底图按版本复用；同一配置结果可按用户意图复用；限制并发、尝试次数和每日额度。单次时延、P95 等待时间、单日预算与付费方案待实测确定，不承诺几秒出图或固定单张价格。</p></section>
+
+<section><h2>十 上线前需要定下的事项</h2>
+<ul><li>首发具体人群、模特覆盖范围与最常见场景，用于确定测试衣物和风格标签。</li><li>目标市场与部署地区、身份服务、识别推荐服务商、图像模型可用性与数据处理要求。</li><li>每张可用预览可接受成本、等待时间、免费额度与超限处理。</li><li>固定模特素材的授权范围；用户图片与身体数据的告知、删除、存储期限和第三方处理方式。</li><li>有无 GPU 和模型服务维护能力。没有也可先完成 API 路线，不因此阻塞推荐与衣橱开发。</li></ul>
+<p>这些事项影响上线配置与验收范围，不影响先建立功能、数据和任务架构。最重要的技术未知是两件真实衣物在目标人群体型上的保真程度，最重要的产品未知是用户愿不愿意录入衣橱并采用推荐。</p></section>
+
+<section id="sources"><h2>十一 核验来源</h2>
+<p class="meta">核验日期 2026年10月15日。来源支持项目公开能力与许可标注；本方案的组合方式、功能边界、评测样本与阈值为产品和工程建议。</p>
+<ol><li><a href="https://developers.openai.com/api/docs/guides/image-generation">OpenAI 图像生成与编辑官方文档</a></li><li><a href="https://github.com/vercel/next.js">Next.js 官方仓库</a>；<a href="https://github.com/fastapi/fastapi">FastAPI 官方仓库</a></li><li><a href="https://github.com/celery/celery">Celery 官方仓库</a>；<a href="https://github.com/rabbitmq/rabbitmq-server">RabbitMQ 官方仓库</a></li><li><a href="https://github.com/ZhengPeng7/BiRefNet">BiRefNet 官方仓库</a>；<a href="https://huggingface.co/ZhengPeng7/BiRefNet">对应官方权重模型卡</a></li><li><a href="https://github.com/danielgatis/rembg">rembg 官方仓库与模型授权说明</a></li><li><a href="https://github.com/patrickjohncyh/fashion-clip">FashionCLIP 官方仓库</a>；<a href="https://huggingface.co/patrickjohncyh/fashion-clip">官方模型卡</a></li><li><a href="https://github.com/pgvector/pgvector">pgvector 官方仓库</a>；<a href="https://github.com/pgvector/pgvector/blob/master/LICENSE">许可证</a></li><li><a href="https://github.com/fashn-AI/fashn-vton-1.5">FASHN VTON 1.5 官方仓库</a>；<a href="https://huggingface.co/fashn-ai/fashn-vton-1.5">官方模型卡</a></li><li><a href="https://github.com/fashn-AI/fashn-vton-1.5/blob/main/src/fashn_vton/pipeline.py">FASHN 默认推理管线</a>；<a href="https://github.com/fashn-AI/fashn-human-parser/blob/main/LICENSE">Human Parser 许可证</a>；<a href="https://github.com/NVlabs/SegFormer/blob/master/LICENSE">SegFormer 许可证</a></li><li><a href="https://github.com/franciszzj/Leffa">Leffa 官方仓库</a>；<a href="https://huggingface.co/franciszzj/Leffa">官方模型卡</a></li><li><a href="https://github.com/QwenLM/Qwen-Image">Qwen-Image 官方仓库</a>；<a href="https://huggingface.co/Qwen/Qwen-Image-Edit-2509">明确版本 Qwen-Image-Edit-2509 模型卡</a></li><li><a href="https://github.com/Zheng-Chong/CatVTON#license">CatVTON 授权说明</a>；<a href="https://github.com/yisol/IDM-VTON#license">IDM-VTON 授权说明</a>；<a href="https://github.com/levihsu/OOTDiffusion/blob/main/LICENSE">OOTDiffusion 许可证</a></li></ol>
+</section>
+</main></body></html>

@@ -1,0 +1,29 @@
+# Dependencies
+**/node_modules/
+**/.venv/
+
+# Build and runtime state
+**/.next/
+**/.vinext/
+**/dist/
+**/.wrangler/
+**/.sites-runtime/
+**/*.tsbuildinfo
+**/__pycache__/
+**/*.pyc
+
+# Local data, media and credentials
+**/.local/
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets.yaml
+**/*.pem
+**/*.key
+
+# OS/editor/logs
+.DS_Store
+**/.DS_Store
+*.log
+.vscode/
+.idea/
