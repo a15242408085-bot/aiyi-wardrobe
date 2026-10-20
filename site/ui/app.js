@@ -6,20 +6,25 @@
   const STORE_KEY = 'aiyi-offline-v1';
   const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
   const fitsBudget = value => new Blob([JSON.stringify(value)]).size <= MAX_BACKUP_BYTES;
-  let state = { version: 1, items: structuredClone(seed.items), models: structuredClone(seed.models), outfits: [], generated: [] };
-  let filter = 'all', currentPage = 'fitting', studioFilter = 'all';
+  let state = { version: 1, items: structuredClone(seed.items), models: structuredClone(seed.models), outfits: [], generated: [], lookMeta: {} };
+  let filter = 'all', currentPage = 'looks', studioFilter = 'all';
   let previewMode = 'example', previewSelectionSignature = null;
-  let selected = [...seed.example.itemIds], modelId = seed.example.modelId;
+  let selected = [], modelId = seed.example.modelId;
   let focusedItemId = seed.items.find(item => item.category === 'outerwear')?.id || seed.items[0]?.id;
   let videoContext = null;
   let db = null, storageMode = 'memory', saveQueue = Promise.resolve(), toastTimer;
   let itemPhoto = '', modelPhoto = '', photoVersion = 0, modelPhotoVersion = 0, videoURL = '';
   const AI_CLIENT_KEY = 'aiyi-ai-client-v1', AI_CODE_KEY = 'aiyi-ai-code-v1', AI_PENDING_KEY = 'aiyi-ai-pending-v1';
   const MAX_AI_IMAGE_BYTES = 1800000;
+  const onlineAI = /^https?:$/.test(location.protocol);
   let clientId = '', accessCode = '', aiStatus = null, aiBusy = false, aiChecking = false, aiPending = null, aiContext = null;
   let recognitionPhoto = '', recognitionCandidates = [], recognitionPhotoVersion = 0, recognitionPreparing = false, recognitionSaving = false;
   let pendingSaveQueue = Promise.resolve(), reviewSaveTimer, aiTick, currentGenerated = null, aiCheckVersion = 0;
   const originalResults = new Map();
+  let activeLookId = 'example-look', homeExpanded = false, trayExpanded = false, wardrobeMode = 'garments';
+  let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1), calendarDate = '';
+  let rotationLookId = '', guideAction = null;
+  let sheetWasDragged = false;
   const uid = () => globalThis.crypto?.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const asset = (ref) => ref?.startsWith('seed:') ? seed.assets[ref.slice(5)] || '' : ref || '';
   const text = (value, max) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -60,7 +65,7 @@
     const models = input.models.map((r) => {
       if (!r || !text(r.id, 100) || r.id !== text(r.id, 100) || modelIds.has(r.id) || !text(r.name, 60) || !imageRef(r.image)) throw Error('备份中的模特资料无效。');
       modelIds.add(r.id);
-      return { id: text(r.id, 100), name: text(r.name, 60), image: r.image, example: r.image.startsWith('seed:') };
+      return { id: text(r.id, 100), name: text(r.name, 60), image: r.image, example: r.image.startsWith('seed:'), createdAt: text(r.createdAt, 40) };
     });
     const outfitIds = new Set();
     const outfits = input.outfits.map((r) => {
@@ -68,7 +73,7 @@
       const cats = r.itemIds.map(id => items.find(item => item.id === id).category);
       if (new Set(cats).size !== cats.length) throw Error('每套搭配的同一分类只能有一件衣物。');
       outfitIds.add(r.id);
-      return { id: text(r.id, 100), name: text(r.name, 60), modelId: r.modelId, itemIds: [...r.itemIds] };
+      return { id: text(r.id, 100), name: text(r.name, 60), modelId: r.modelId, itemIds: [...r.itemIds], createdAt: text(r.createdAt, 40) };
     });
     if (input.generated !== undefined && (!Array.isArray(input.generated) || input.generated.length > 100)) throw Error('试穿记录格式无效或数量过多。');
     const generatedIds = new Set();
@@ -77,7 +82,8 @@
       generatedIds.add(r.id);
       return {id: r.id, name: text(r.name, 60) || '我的 AI 试穿', createdAt: text(r.createdAt, 40), image: r.image, modelImage: r.modelImage, modelId: text(r.modelId, 100), modelName: text(r.modelName, 60), prompt: text(r.prompt, 600), items: r.items.map(item => ({id: text(item.id, 100), name: text(item.name, 60), category: item.category}))};
     });
-    return { version: 1, items, models, outfits, generated };
+    const lookMeta = Object.fromEntries(Object.entries(input.lookMeta || {}).slice(0, 300).filter(([id, meta]) => /^[a-zA-Z0-9_-]{1,110}$/.test(id) && meta && typeof meta === 'object').map(([id, meta]) => [id, {favorite: meta.favorite === true, hidden: meta.hidden === true, date: /^\d{4}-\d{2}-\d{2}$/.test(meta.date || '') ? meta.date : ''}]));
+    return { version: 1, items, models, outfits, generated, lookMeta };
   }
   async function openStorage() {
     try {
@@ -136,8 +142,8 @@
     return saveQueue;
   }
   function navigate(page, focus = true) {
-    const titles = { wardrobe: ['我的衣橱', '把喜欢的衣物收好，让每一天都有得穿。'], fitting: ['搭配工作台', '从自己的衣橱里，搭出今天喜欢的样子。'], models: ['我的模特', '保存全身参考图，导入转身视频查看更多角度。'], about: ['使用说明', '你的衣橱留在本地，在线 AI 按需使用。'] };
-    if (!Object.hasOwn(titles, page)) page = 'fitting';
+    const titles = { looks: ['我的造型', '让每一套喜欢的穿搭，留下自己的样子。'], wardrobe: ['我的衣橱', '从已经拥有的衣物，搭出新的自己。'], fitting: ['虚拟试穿', '选好人物和单品，看看穿在身上的样子。'], models: ['我的人物', '保存全身参考图，导入转身视频查看更多角度。'], about: ['我的空间', '衣橱、AI 服务和备份，都在这里。'] };
+    if (!Object.hasOwn(titles, page)) page = 'looks';
     currentPage = page;
     document.body.dataset.page = page;
     document.querySelectorAll('[data-view]').forEach(node => { node.hidden = node.dataset.view !== page; });
@@ -149,8 +155,11 @@
     $('app-title').textContent = titles[page][0]; $('page-subtitle').textContent = titles[page][1];
     if (page !== 'models') $('rotation-video').pause();
     if (page !== 'fitting') $('studio-rotation-video')?.pause();
+    if (page !== 'looks') $('home-video')?.pause();
+    if (page === 'looks') renderHome();
+    renderTray();
     if (location.hash !== `#${page}`) { try { history.replaceState(null, '', `#${page}`); } catch (_) {} }
-    if (focus) { $('app-title').tabIndex = -1; $('app-title').focus({ preventScroll: true }); window.scrollTo({ top: 0 }); }
+    if (focus) { const target = page === 'looks' ? $('home-stage') : page === 'fitting' ? $('main-content') : $('app-title'); target.tabIndex = -1; target.focus({ preventScroll: true }); window.scrollTo({ top: 0 }); }
   }
   function renderWardrobe() {
     $('item-count').textContent = state.items.length;
@@ -159,18 +168,42 @@
     document.querySelectorAll('[data-filter]').forEach(node => { node.setAttribute('aria-pressed', String(node.dataset.filter === filter)); node.classList.toggle('active', node.dataset.filter === filter); });
     const query = $('search-input').value.trim().toLowerCase();
     const items = state.items.filter(i => (filter === 'all' || (filter === 'favorites' ? i.favorite : i.category === filter)) && `${i.name} ${i.color} ${i.notes} ${categories[i.category]}`.toLowerCase().includes(query));
-    $('wardrobe-grid').replaceChildren(...items.map(item => {
-      const card = el('article', 'item-card');
-      const photo = button('', () => showImage(item.image, item.name), 'item-image');
-      photo.setAttribute('aria-label', `查看${item.name}大图`); photo.append(picture(item.image, item.name));
-      const body = el('div', 'item-body'); body.append(el('h3', '', item.name), el('p', 'item-meta', `${categories[item.category]} · ${item.color || '未填写颜色'}`));
-      const actions = el('div', 'card-actions');
-      const favorite = button(item.favorite ? '♥ 已收藏' : '♡ 收藏', () => { item.favorite = !item.favorite; persist(); renderWardrobe(); renderFitting(); }, 'favorite-button');
-      favorite.setAttribute('aria-pressed', String(item.favorite)); favorite.setAttribute('aria-label', `${item.favorite ? '取消收藏' : '收藏'}${item.name}`);
-      actions.append(favorite, button('编辑', () => openItem(item), 'text-button'), button('去搭配', () => { selectItem(item.id, true); navigate('fitting'); }, 'text-button'));
-      body.append(actions); card.append(photo, body); return card;
-    }));
-    $('wardrobe-empty').hidden = items.length !== 0;
+    const grid = $('wardrobe-grid'); grid.replaceChildren();
+    if (wardrobeMode === 'looks') {
+      grid.classList.add('looks-collection');
+      lookRecords().filter(look => !query || look.name.toLowerCase().includes(query)).forEach(look => {
+        const card = button('', () => { activeLookId = look.id; navigate('looks'); }, 'collection-look');
+        card.append(picture(look.displayImage, look.name), el('strong', '', look.name), el('span', '', look.type)); grid.append(card);
+      });
+    } else {
+      grid.classList.remove('looks-collection');
+      Object.entries(categories).forEach(([category, title]) => {
+        const group = items.filter(item => item.category === category); if (!group.length) return;
+        const shelf = el('section', 'wardrobe-shelf');
+        const heading = el('div', 'wardrobe-shelf-heading'); heading.append(el('h2', '', title), el('span', '', `${group.length} 件`));
+        const row = el('div', 'wardrobe-shelf-row');
+        group.forEach(item => {
+          const card = el('article', `item-card wardrobe-piece${selected.includes(item.id) ? ' is-selected' : ''}`);
+          const photo = button('', event => {
+            const origin = event.currentTarget.getBoundingClientRect();
+            const adding = !selected.includes(item.id); selectItem(item.id);
+            if (adding) flyGarment(item, origin);
+          }, 'item-image');
+          photo.setAttribute('aria-label', `${selected.includes(item.id) ? '移除已选' : '选择试穿'}${item.name}`);
+          photo.setAttribute('aria-pressed', String(selected.includes(item.id))); photo.append(picture(item.image, item.name));
+          if (selected.includes(item.id)) photo.append(el('span', 'piece-selected-mark', '✓'));
+          const body = el('div', 'item-body'); body.append(el('h3', '', item.name), el('p', 'item-meta', item.color || title));
+          const actions = el('div', 'card-actions');
+          const favorite = button(item.favorite ? '♥' : '♡', () => { item.favorite = !item.favorite; persist(); renderWardrobe(); renderFitting(); }, 'favorite-button');
+          favorite.setAttribute('aria-pressed', String(item.favorite)); favorite.setAttribute('aria-label', `${item.favorite ? '取消收藏' : '收藏'}${item.name}`);
+          actions.append(favorite, button('详情', () => openItem(item), 'text-button'));
+          body.append(actions); card.append(photo, body); row.append(card);
+        });
+        shelf.append(heading, row); grid.append(shelf);
+      });
+    }
+    $('wardrobe-empty').hidden = grid.childElementCount > 0;
+    renderTray();
   }
   function originalOutfit() {
     const currentModel = state.models.find(m => m.id === modelId);
@@ -185,8 +218,9 @@
     if (!item) return;
     focusedItemId = item.id;
     selected = selected.includes(id) && !keepSelected ? selected.filter(i => i !== id) : [...selected.filter(i => state.items.find(other => other.id === i)?.category !== item.category), id];
-    renderFitting();
+    rememberSelection(); renderFitting(); renderWardrobe();
   }
+  function rememberSelection() { try { sessionStorage.setItem('aiyi-current-selection',JSON.stringify({selected,modelId})); } catch (_) {} }
   function renderStudioPreview() {
     if (!$('studio-preview-label')) return;
     const model = state.models.find(m => m.id === modelId);
@@ -257,6 +291,7 @@
     $('studio-selection-summary').textContent = selected.length ? `已搭配 ${selected.length} 件 · ${new Set(selected.map(id => state.items.find(i => i.id === id)?.category)).size} 类单品` : '还未选衣物，先挑一件喜欢的。';
   }
   function renderFitting() {
+    rememberSelection();
     $('model-select').replaceChildren(...state.models.map(model => {
       const option = el('option', '', model.name); option.value = model.id; return option;
     }));
@@ -285,7 +320,7 @@
     $('show-result').textContent = '示例前后对比';
     $('fitting-help').textContent = '每类选一件，同类新选择会替换上一件。';
     renderOutfits();
-    renderGeneratedHistory(); renderAI();
+    renderGeneratedHistory(); renderAI(); renderTray();
   }
   function renderOutfits() {
     $('saved-outfits').replaceChildren(...state.outfits.map(outfit => {
@@ -315,7 +350,238 @@
       body.append(actions); card.append(photo, body); return card;
     }));
   }
-  function renderAll() { renderWardrobe(); renderFitting(); renderModels(); }
+  const localDate = value => {
+    if (value === '') return '';
+    const d = value ? new Date(value) : new Date();
+    return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  function lookRecords() {
+    const sample = {id:'example-look', name:'秋日，穿得轻松一点', type:'实测试穿示例', image:seed.example.result, displayImage:'/studio/model-outfit-cutout.png', modelId:seed.example.modelId, itemIds:seed.example.itemIds, createdAt:'2026-10-16T12:00:00+08:00', season:'AUTUMN'};
+    const generated = state.generated.map(record => ({...record, type:'AI 试穿', displayImage:record.image, itemIds:record.items.map(item => item.id), season:'MY LOOK'}));
+    const drafts = state.outfits.map(record => ({...record, type:record.sourcePhoto ? '我的穿搭照片' : '搭配草稿 · 人物为原图', image:state.models.find(model => model.id === record.modelId)?.image || '', displayImage:state.models.find(model => model.id === record.modelId)?.image || '', season:'EVERYDAY'}));
+    const photos = state.models.filter(model => !model.example && !drafts.some(look => look.modelId === model.id)).map(model => ({...model,id:`model-${model.id}`,modelId:model.id,type:'人物照片 · 可用来试穿',displayImage:model.image,itemIds:[],season:'MY STYLE'}));
+    return [...generated, sample, ...drafts, ...photos].filter(record => !state.lookMeta?.[record.id]?.hidden).map(record => ({...record, date:state.lookMeta?.[record.id]?.date || localDate(record.createdAt) || '', favorite:state.lookMeta?.[record.id]?.favorite === true}));
+  }
+  function currentLook() { return lookRecords().find(look => look.id === activeLookId) || lookRecords()[0]; }
+  function colorSwatch(color) {
+    return [['白','#f1eee6'],['黑','#242323'],['棕','#916d50'],['蓝','#a5bfd2'],['黄','#e5c561'],['红','#a4473b'],['粉','#e3b7b7'],['绿','#a0aa8f'],['灰','#b5b6bd'],['紫','#a899ba']].find(([name]) => (color || '').includes(name))?.[1] || '#c6af99';
+  }
+  function renderHome() {
+    if (!$('home-image')) return;
+    const records = lookRecords(), look = currentLook(); activeLookId = look?.id || '';
+    const image = $('home-image');
+    image.hidden = !look; if (look) { image.src = asset(look.displayImage); image.alt = look.name; } else image.removeAttribute('src');
+    image.classList.toggle('is-cutout', look?.id === 'example-look');
+    $('home-stage').classList.toggle('is-empty', !look);
+    $('home-season').textContent = look?.season || 'YOUR STYLE';
+    $('home-name').textContent = look?.name || '第一套造型，从你开始';
+    $('home-type').textContent = look?.type || '拍摄或导入一张全身照';
+    $('home-counter').textContent = records.length ? `${String(records.findIndex(row => row.id === look.id)+1).padStart(2,'0')} / ${String(records.length).padStart(2,'0')}` : '0 / 0';
+    $('home-date').textContent = look?.date ? look.date.replaceAll('-','.') : '未记录日期';
+    $('home-detail-sheet').classList.toggle('expanded', homeExpanded);
+    $('home-details-toggle').setAttribute('aria-expanded', String(homeExpanded));
+    $('home-details-toggle').setAttribute('aria-label', homeExpanded ? '收起造型详情' : '展开造型详情');
+    const items = (look?.itemIds || []).map(id => state.items.find(item => item.id === id)).filter(Boolean);
+    if (look?.id === 'example-look') seed.items.forEach(item => { if (!items.some(row => row.id === item.id)) items.push(item); });
+    $('home-colors').replaceChildren(...items.slice(0,5).map(item => { const swatch = el('span', 'palette-dot'); swatch.style.backgroundColor = colorSwatch(item.color); swatch.title = item.color; return swatch; }));
+    $('home-items').replaceChildren(...items.map(item => {
+      const card = button('', () => { const saved = state.items.find(row => row.id === item.id); if (saved) { selectItem(saved.id, true); toast(`已将「${item.name}」放入试穿托盘`); } else { loadExample(); toast('示例衣物已恢复到衣橱'); } }, 'home-garment');
+      card.append(picture(item.image, ''), el('span', '', item.name)); card.setAttribute('aria-label', `将${item.name}加入试穿`); return card;
+    }));
+    if (!items.length) $('home-items').append(el('p','muted',look ? '此造型的原单品已不在衣橱，结果照片仍保留。' : '先添加自己的衣物或人物照片。'));
+    for (const id of ['home-share','home-delete','home-favorite','home-to-fitting']) $(id).disabled = !look;
+    $('home-favorite').setAttribute('aria-pressed', String(!!look?.favorite));
+    $('home-favorite').classList.toggle('active', !!look?.favorite);
+    $('home-favorite').setAttribute('aria-label', look?.favorite ? '取消收藏造型' : '收藏造型');
+    $('look-prev').disabled = records.length < 2; $('look-next').disabled = records.length < 2;
+    renderHomeRotation();
+    const stage = $('home-stage'); if (!matchMedia('(prefers-reduced-motion: reduce)').matches && stage.dataset.look !== activeLookId) {
+      image.animate([{opacity:0, transform:'translateY(14px) scale(.98)'},{opacity:1, transform:'translateY(0) scale(1)'}],{duration:400,easing:'cubic-bezier(.2,.65,.3,1)'});
+    } stage.dataset.look = activeLookId;
+    requestAnimationFrame(layoutHomeStage);
+  }
+  function layoutHomeStage() {
+    if(currentPage !== 'looks' || !$('home-stage'))return;
+    const stage=$('home-stage').getBoundingClientRect(), sheet=$('home-detail-sheet').getBoundingClientRect();
+    if(!stage.height||!sheet.height)return;
+    for(const id of ['home-image','home-video'])Object.assign($(id).style,{top:'12px',height:`${Math.max(100,sheet.top-stage.top-60)}px`,minHeight:'0',transition:matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'height .3s ease'});
+    const tools=$('home-stage').querySelector('.home-stage-tools');if(tools)Object.assign(tools.style,{top:`${Math.max(0,sheet.top-stage.top-36)}px`,bottom:'auto',display:'flex',zIndex:'5'});
+  }
+  function changeLook(direction) {
+    const records = lookRecords(); if (!records.length) return;
+    const index = records.findIndex(look => look.id === activeLookId);
+    activeLookId = records[(index + direction + records.length) % records.length].id; renderHome();
+  }
+  function renderTray() {
+    if (!$('woo-selection-tray')) return;
+    const items = selected.map(id => state.items.find(item => item.id === id)).filter(Boolean);
+    $('woo-selection-tray').hidden = !items.length || currentPage === 'fitting' || currentPage === 'models' || currentPage === 'about';
+    $('woo-selection-tray').classList.toggle('expanded', trayExpanded);
+    $('tray-toggle').setAttribute('aria-expanded', String(trayExpanded));
+    $('tray-count').textContent = `${items.length} 件已选`;
+    $('tray-dressup').disabled = !items.length;
+    $('tray-items').replaceChildren(...items.map(item => {
+      const node = el('div','tray-piece'); node.append(picture(item.image,item.name));
+      const remove = button('×',() => { selected = selected.filter(id => id !== item.id); renderFitting(); renderWardrobe(); }, 'tray-remove'); remove.setAttribute('aria-label',`移除${item.name}`); node.append(remove); return node;
+    }));
+  }
+  function flyGarment(item, origin) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || !$('tray-toggle')) return;
+    const clone = picture(item.image,'','garment-flight');
+    Object.assign(clone.style,{position:'fixed',left:`${origin.left}px`,top:`${origin.top}px`,width:`${origin.width}px`,height:`${origin.height}px`,objectFit:'contain',pointerEvents:'none',zIndex:'120'}); document.body.append(clone);
+    const target = $('tray-toggle').getBoundingClientRect();
+    const animation = clone.animate([{transform:'translate(0,0) scale(1)',opacity:.95},{transform:`translate(${target.left+target.width/2-origin.left-origin.width/2}px,${target.top+target.height/2-origin.top-origin.height/2}px) scale(.18)`,opacity:.35}],{duration:520,easing:'cubic-bezier(.55,.05,.35,1)'});
+    animation.onfinish = () => {clone.remove(); $('woo-selection-tray').animate([{transform:'translateX(-50%) scale(1)'},{transform:'translateX(-50%) scale(1.035)'},{transform:'translateX(-50%) scale(1)'}],{duration:240});};
+  }
+  function renderCalendar() {
+    if (!$('calendar-grid')) return;
+    $('calendar-month').textContent = `${calendarMonth.getFullYear()}年 ${calendarMonth.getMonth()+1}月`;
+    const grid = $('calendar-grid'), records = lookRecords(); grid.replaceChildren();
+    ['日','一','二','三','四','五','六'].forEach(day => grid.append(el('span','calendar-weekday',day)));
+    const first = new Date(calendarMonth.getFullYear(),calendarMonth.getMonth(),1), last = new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+1,0);
+    for (let i=0;i<first.getDay();i++) {const blank=el('span','calendar-blank'); blank.setAttribute('aria-hidden','true'); grid.append(blank);}
+    for (let day=1;day<=last.getDate();day++) {
+      const date = localDate(new Date(calendarMonth.getFullYear(),calendarMonth.getMonth(),day));
+      const matches = records.filter(look => look.date === date);
+      const node=button('',() => {calendarDate=date; renderCalendar();},`calendar-day${date===localDate()?' today':''}${date===calendarDate?' selected':''}`);
+      node.setAttribute('aria-label',`${date}，${matches.length} 套造型`); node.setAttribute('aria-pressed',String(calendarDate===date));
+      node.append(el('span','calendar-day-number',String(day))); if(matches[0]) node.append(picture(matches[0].displayImage,'')); if(matches.length>1) node.append(el('span','calendar-day-count',`+${matches.length-1}`)); grid.append(node);
+    }
+    const matches = calendarDate ? records.filter(look=>look.date===calendarDate) : records.filter(look=>look.date.startsWith(`${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth()+1).padStart(2,'0')}`));
+    $('calendar-looks').replaceChildren(...matches.map(look=>{const node=button('',()=>{activeLookId=look.id; $('woo-calendar-dialog').close(); navigate('looks');},'calendar-look'); node.append(picture(look.displayImage,''),el('span','',look.name)); return node;}));
+    if(!matches.length) $('calendar-looks').append(el('p','muted',calendarDate?'这一天还没有造型。新保存的试穿会按日期出现在这里。':'这个月还没有造型，换一个月份看看。'));
+  }
+  function openSettings() {
+    navigate('about'); $('studio-ai-settings').open=true; $('studio-ai-settings').scrollIntoView({block:'center'}); $('ai-code').focus();
+  }
+  function startBuilder() {
+    if(!selected.length){toast('先从衣橱选一件想试穿的衣服'); navigate('wardrobe'); return;}
+    renderFitting(); navigate('fitting');
+    let shown=false; try{shown=localStorage.getItem('aiyi-photo-guide')==='yes';}catch(_){}
+    if(!shown) showGuide(()=>{});
+  }
+  function showGuide(next) {
+    guideAction=next;
+    $('woo-guide-image').src=asset(state.models[0]?.image || seed.models[0].image);
+    $('woo-guide-dialog').showModal();
+  }
+  async function shareLook() {
+    const look=currentLook(); if(!look) return;
+    const url=asset(look.image), extension=url.startsWith('data:image/png')?'png':'jpg';
+    try {
+      if(navigator.share && navigator.canShare){
+        const [header,encoded]=url.split(','), bytes=Uint8Array.from(atob(encoded),char=>char.charCodeAt(0));
+        const blob=new Blob([bytes],{type:header.match(/^data:([^;]+)/)?.[1] || 'image/jpeg'}), file=new File([blob],`${look.name}.${extension}`,{type:blob.type});
+        if(navigator.canShare({files:[file]})){await navigator.share({title:look.name,files:[file]}); return;}
+      }
+      const anchor=el('a'); anchor.href=url; anchor.download=`爱衣橱-${look.name}.${extension}`; anchor.click(); toast('造型图片已下载，可以发给朋友。');
+    } catch(error){if(error.name!=='AbortError')toast('分享未完成，可点击人物大图下载。');}
+  }
+  function renderHomeRotation() {
+    const video=$('home-video'); if(!video) return;
+    const ready=!!videoURL && rotationLookId===activeLookId;
+    video.hidden=!ready; $('home-image').hidden=ready || !currentLook();
+    if(!ready) video.pause();
+    $('home-play').hidden=!ready;
+    $('home-play').setAttribute('aria-label',!video.paused?'暂停自动转身':'播放自动转身');
+    $('home-play').setAttribute('aria-pressed',String(!video.paused));
+    $('home-status').textContent=ready?'左右拖动人物，查看不同角度':currentLook()?'人物静态图 · 导入转身视频后可旋转':'添加照片，开始你的第一套造型';
+  }
+  async function storeRotation(file) {
+    if(!db) {toast('当前浏览器无法持久保存视频，关闭前请保留原视频。');return;}
+    try {
+      await new Promise((resolve,reject)=>{const tx=db.transaction('state','readwrite');tx.objectStore('state').put({file,context:videoContext,lookId:rotationLookId},'rotation');tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error);});
+      toast('转身视频已保存在此浏览器，重新打开仍可查看。');
+    }catch(_){toast('视频本次可播放，但浏览器空间不足，未能保存。请保留原视频。');}
+  }
+  async function restoreRotation() {
+    if(!db)return;
+    try{
+      const saved=await new Promise((resolve,reject)=>{const req=db.transaction('state').objectStore('state').get('rotation');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
+      if(saved?.file instanceof Blob){importRotationVideo(saved.file,saved.lookId,false);videoContext=saved.context;}
+    }catch(_){toast('原转身视频暂时无法读取，可以重新导入。');}
+  }
+  function renderWooTask() {
+    if(!$('woo-task-pill'))return;
+    $('woo-task-pill').hidden=!aiPending;
+    $('woo-task-label').textContent=aiPending?.phase==='review'?'识别完成 · 确认入库':aiPending?.phase==='ready'?'试穿完成 · 查看结果':aiBusy?(aiPending?.kind==='recognition'?'正在识别衣物…':'正在生成试穿…'):'任务待查询 · 点此继续';
+  }
+  function bindCamera() {
+    const dialog=el('dialog','camera-dialog');dialog.id='woo-camera-dialog';dialog.setAttribute('aria-label','拍摄全身穿搭照片');
+    const camera=el('video','camera-live');camera.autoplay=true;camera.muted=true;camera.playsInline=true;
+    const photo=el('img','camera-captured');photo.alt='待确认的穿搭照片';photo.hidden=true;
+    const guide=el('div','camera-framing');guide.setAttribute('aria-hidden','true');
+    const note=el('p','camera-guidance','请把全身放进画面，保持光线充足');note.setAttribute('role','status');
+    let stream=null,captured='',facing='environment';
+    const stop=()=>{stream?.getTracks().forEach(track=>track.stop());stream=null;camera.srcObject=null;};
+    const actions=el('div','camera-actions'),review=el('div','camera-review');review.hidden=true;
+    const close=button('×',()=>dialog.close(),'camera-close');close.setAttribute('aria-label','关闭拍摄');
+    const shutter=button('',()=>{if(!camera.videoWidth)return;const canvas=document.createElement('canvas');canvas.width=camera.videoWidth;canvas.height=camera.videoHeight;canvas.getContext('2d').drawImage(camera,0,0);captured=encodeCanvas(canvas);photo.src=captured;photo.hidden=false;camera.hidden=true;actions.hidden=true;review.hidden=false;note.textContent='确认照片完整清晰，再交给衣橱整理';stop();},'camera-shutter');shutter.setAttribute('aria-label','拍摄照片');
+    const switcher=button('切换镜头',()=>{facing=facing==='environment'?'user':'environment';void start();},'camera-secondary');
+    const upload=button('从照片选择',()=>{dialog.close();openRecognition();$('recognition-image-input').click();},'camera-secondary');
+    actions.append(upload,shutter,switcher);
+    review.append(button('重新拍摄',()=>void start(),'camera-secondary'),button('使用这张照片',()=>{recognitionPhotoVersion++;recognitionPhoto=captured;recognitionCandidates=[];dialog.close();openRecognition();},'button button-primary'));
+    dialog.append(camera,photo,guide,close,note,actions,review);document.body.append(dialog);
+    async function start(){
+      stop();captured='';camera.hidden=false;photo.hidden=true;actions.hidden=false;review.hidden=true;shutter.disabled=true;note.textContent='正在打开相机…';
+      if(!navigator.mediaDevices?.getUserMedia){note.textContent='当前浏览器不能使用相机，请从照片选择。';return;}
+      try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1080},height:{ideal:1920}}});if(!dialog.open){stop();return;}camera.srcObject=stream;await camera.play();shutter.disabled=false;note.textContent='从头到脚完整入镜，准备好了就拍一张';}
+      catch(error){stop();note.textContent=error.name==='NotAllowedError'?'相机权限未开启，也可以直接选择已有照片。':'暂时无法打开相机，请检查设备或选择已有照片。';}
+    }
+    dialog.addEventListener('close',stop);window.addEventListener('pagehide',stop);
+    const action=button('',()=>{if(aiPending){toast('请先完成或移除当前 AI 任务，再拍摄新的照片。');return;}$('woo-create-dialog').close();showGuide(()=>{dialog.showModal();void start();});},'');
+    const icon=el('span','create-action-icon','◎'),body=el('span');body.append(el('strong','','拍摄今天的穿搭'),el('small','','打开相机，拍一张清晰的全身照'));action.append(icon,body,el('span','','↗'));
+    $('woo-create-dialog').querySelector('.create-actions').prepend(action);
+  }
+  function bindWoo() {
+    bindCamera();
+    $('woo-create').addEventListener('click',()=>$('woo-create-dialog').showModal());
+    $('woo-menu-open').addEventListener('click',()=>$('woo-menu-dialog').showModal());
+    $('woo-calendar-open').addEventListener('click',()=>{renderCalendar();$('woo-calendar-dialog').showModal();});
+    $('look-prev').addEventListener('click',()=>changeLook(-1)); $('look-next').addEventListener('click',()=>changeLook(1));
+    $('home-details-toggle').addEventListener('click',()=>{if(sheetWasDragged){sheetWasDragged=false;return;}homeExpanded=!homeExpanded;renderHome();});
+    $('home-share').addEventListener('click',shareLook);
+    $('home-favorite').addEventListener('click',()=>{const look=currentLook();if(!look)return;state.lookMeta[look.id]={...state.lookMeta[look.id],favorite:!look.favorite};void persist();renderHome();});
+    $('home-delete').addEventListener('click',async()=>{const look=currentLook();if(!look||!confirm(`从造型中移除「${look.name}」？衣橱里的单品会保留。`))return;state.lookMeta[look.id]={...state.lookMeta[look.id],hidden:true};if(look.id===rotationLookId)clearVideo();await persist();renderAll();});
+    $('home-to-fitting').addEventListener('click',()=>{const look=currentLook();if(!look)return;if(look.id==='example-look')loadExample();else {if(state.models.some(m=>m.id===look.modelId))modelId=look.modelId;selected=look.itemIds.filter(id=>state.items.some(item=>item.id===id));}startBuilder();});
+    $('home-import-video').addEventListener('click',()=>$('home-video-input').click());
+    $('home-video-input').addEventListener('change',e=>importRotationVideo(e.target.files?.[0],activeLookId));
+    $('home-play').addEventListener('click',async()=>{const video=$('home-video');try{if(video.paused)await video.play();else video.pause();}catch(_){toast('视频暂时不能播放，请重新导入。');}});
+    $('tray-toggle').addEventListener('click',()=>{trayExpanded=!trayExpanded;renderTray();});$('tray-dressup').addEventListener('click',startBuilder);
+    $('calendar-prev').addEventListener('click',()=>{calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()-1,1);calendarDate='';renderCalendar();});
+    $('calendar-next').addEventListener('click',()=>{calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+1,1);calendarDate='';renderCalendar();});
+    $('woo-guide-continue').addEventListener('click',()=>{try{localStorage.setItem('aiyi-photo-guide','yes');}catch(_){}$('woo-guide-dialog').close();const next=guideAction;guideAction=null;next?.();});
+    document.querySelectorAll('[data-create-action]').forEach(node=>node.addEventListener('click',()=>{
+      $('woo-create-dialog').close();
+      switch(node.dataset.createAction){case 'recognize':showGuide(openRecognition);break;case 'model':showGuide(()=>$('add-model').click());break;case 'manual':openItem();break;case 'rotation':$('home-video-input').click();break;}
+    }));
+    document.querySelectorAll('[data-woo-action]').forEach(node=>node.addEventListener('click',()=>{
+      $('woo-menu-dialog').close();
+      switch(node.dataset.wooAction){case 'models':navigate('models');break;case 'settings':openSettings();break;case 'history':navigate('fitting');$('studio-records').open=true;$('studio-records').scrollIntoView({block:'start'});break;case 'help':navigate('about');break;case 'backup':navigate('wardrobe');$('export-data').focus();break;}
+    }));
+    $('woo-task-open').addEventListener('click',()=>{if(aiPending?.kind==='recognition')openRecognition();else {openSettings();$('ai-task-panel').scrollIntoView({block:'center'});}});
+    const tools=el('div','wardrobe-mode-tabs');tools.setAttribute('role','group');tools.setAttribute('aria-label','切换单品与造型');
+    for(const [value,label] of [['garments','我的单品'],['looks','我的造型']]){const control=button(label,()=>{wardrobeMode=value;[...tools.children].forEach(n=>{n.classList.toggle('active',n===control);n.setAttribute('aria-pressed',String(n===control));});renderWardrobe();});control.setAttribute('aria-pressed',String(value==='garments'));control.classList.toggle('active',value==='garments');tools.append(control);}
+    $('wardrobe-grid').before(tools);
+    document.querySelectorAll('dialog').forEach(dialog=>{dialog.addEventListener('click',event=>{if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close();}});});
+    const video=$('home-video'); let drag=null, inertia=0;
+    for(const name of ['play','pause','loadedmetadata','error'])video.addEventListener(name,()=>{if(name==='error'&&videoURL)toast('视频格式无法播放，请使用 H.264 MP4。');renderHomeRotation();});
+    $('home-stage').style.touchAction='pan-y';
+    $('home-stage').addEventListener('pointerdown',event=>{if(event.button!==0||event.target.closest('button'))return;cancelAnimationFrame(inertia);drag={x:event.clientX,origin:event.clientX,last:event.clientX,t:video.currentTime,velocity:0,moved:false};if(!video.hidden)video.pause();event.currentTarget.setPointerCapture(event.pointerId);});
+    $('home-stage').addEventListener('pointermove',event=>{if(!drag)return;const dx=event.clientX-drag.x;drag.moved=drag.moved||Math.abs(dx)>8;drag.velocity=event.clientX-drag.last;drag.last=event.clientX;if(!video.hidden&&video.duration){let t=drag.t-dx/Math.max($('home-stage').clientWidth,1)*video.duration*1.5;video.currentTime=((t%video.duration)+video.duration)%video.duration;}});
+    const release=()=>{if(!drag)return;const end=drag;drag=null;if(video.hidden){if(Math.abs(end.last-end.origin)>65)changeLook(end.last<end.origin?1:-1);return;}if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;let speed=end.velocity;const coast=()=>{speed*=.9;if(Math.abs(speed)<.3||video.hidden||!video.duration)return;video.currentTime=(video.currentTime-speed/Math.max($('home-stage').clientWidth,1)*video.duration+video.duration)%video.duration;inertia=requestAnimationFrame(coast);};inertia=requestAnimationFrame(coast);};
+    $('home-stage').addEventListener('pointerup',release);$('home-stage').addEventListener('pointercancel',()=>{drag=null;});
+    let sheetDrag=null;
+    $('home-details-toggle').style.touchAction='none';
+    $('home-details-toggle').addEventListener('pointerdown',e=>{sheetDrag=e.clientY;sheetWasDragged=false;e.currentTarget.setPointerCapture(e.pointerId);});
+    $('home-details-toggle').addEventListener('pointermove',e=>{if(sheetDrag===null)return;const distance=e.clientY-sheetDrag;if(Math.abs(distance)>8){sheetWasDragged=true;$('home-detail-sheet').style.translate=`0 ${Math.max(-80,Math.min(80,distance))}px`;}});
+    const releaseSheet=e=>{if(sheetDrag!==null&&Math.abs(e.clientY-sheetDrag)>25){homeExpanded=e.clientY<sheetDrag;renderHome();}sheetDrag=null;$('home-detail-sheet').style.translate='';};
+    $('home-details-toggle').addEventListener('pointerup',releaseSheet);$('home-details-toggle').addEventListener('pointercancel',releaseSheet);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden){video.pause();cancelAnimationFrame(inertia);}});
+    if(globalThis.ResizeObserver){const observer=new ResizeObserver(layoutHomeStage);observer.observe($('home-detail-sheet'));observer.observe($('home-stage'));}
+    window.addEventListener('resize',layoutHomeStage);
+  }
+  function renderAll() { renderWardrobe(); renderFitting(); renderModels(); renderHome(); renderCalendar(); }
   function showImage(ref, title) {
     $('image-dialog-title').textContent = title; $('image-dialog-image').src = asset(ref); $('image-dialog-image').alt = title;
     $('image-dialog-download').href = asset(ref); $('image-dialog-download').download = `${title.replace(/[\\/:*?"<>|]/g, '-')}.jpg`;
@@ -429,7 +695,7 @@
     return data;
   }
   async function checkAI(code = accessCode, quiet = false) {
-    if (!code || !clientId) return false;
+    if (!onlineAI || !code || !clientId) return false;
     const revision = ++aiCheckVersion;
     if (!quiet) { aiChecking = true; $('ai-global-error').textContent = ''; renderAI(); }
     try {
@@ -485,13 +751,16 @@
   }
   function renderAI() {
     if (!$('ai-enable')) return;
-    const enabled = !!(accessCode && aiStatus?.authorized);
+    renderWooTask();
+    const enabled = !!(onlineAI && accessCode && aiStatus?.authorized);
+    $('ai-access-form').hidden = !onlineAI;
     if ($('studio-ai-short-status')) $('studio-ai-short-status').textContent = aiBusy ? 'AI 处理中' : enabled && aiStatus.configured ? 'AI 已连接' : 'AI 服务';
     $('ai-enable').disabled = aiChecking || aiBusy;
     $('ai-enable').textContent = aiChecking ? '正在验证…' : enabled ? '更新体验码' : '启用 AI';
     $('ai-code').disabled = aiChecking || aiBusy;
     $('ai-lock').hidden = !enabled; $('ai-lock').disabled = aiBusy;
     $('ai-access-status').textContent = enabled ? (aiStatus.configured ? 'AI 已启用，个人衣橱仍保存在此浏览器。' : '体验码已验证，AI 服务尚未准备好。') : '尚未启用 AI，整理衣橱和查看示例仍可使用。';
+    if (!onlineAI) $('ai-access-status').textContent = '这是离线体验页，可以整理衣橱、保存搭配和导入转身视频。识别与新试穿请打开在线网址使用。';
     $('ai-quota').textContent = enabled ? `剩余：识别 ${aiStatus.remaining?.recognition ?? 0} / ${aiStatus.limits?.recognition ?? 0} 次 · 试穿 ${aiStatus.remaining?.tryOn ?? 0} / ${aiStatus.limits?.tryOn ?? 0} 次` : '';
     const hasSelection = selected.length > 0 && state.models.some(model => model.id === modelId);
     $('ai-try-on').disabled = aiBusy || !!aiPending || !aiAllowed('tryOn') || !hasSelection;
@@ -607,7 +876,7 @@
     state = next;
     const saved = await persist();
     $('ai-result-save-note').textContent = saved ? '已将适合浏览的图片和本次提交信息保存到此浏览器，可随备份导出。原始清晰图片请现在下载保留。' : '结果目前只在本页内存中，请下载图片或导出备份，避免关闭页面后丢失。';
-    $('ai-save-result').hidden = saved; renderGeneratedHistory();
+    $('ai-save-result').hidden = saved; renderGeneratedHistory(); activeLookId = record.id; renderHome(); renderCalendar();
     return saved;
   }
   async function finishTryOn(result) {
@@ -626,7 +895,7 @@
     $('ai-result-save-note').textContent = '正在保存本次结果…';
     record.image = await compressImage(raw);
     if (await saveGenerated(record)) await clearPending();
-    if (currentPage === 'fitting') $('fitting-model-image').scrollIntoView({behavior: 'auto', block: 'center'});
+    if (currentPage === 'fitting' || currentPage === 'looks') navigate('looks');
     toast('本次 AI 试穿已完成，可查看并下载结果。');
   }
   function renderGeneratedHistory() {
@@ -640,7 +909,7 @@
         if (!confirm(`删除「${record.name}」的本机试穿记录？衣物和人物照片会保留。`)) return;
         state.generated = state.generated.filter(saved => saved.id !== record.id); originalResults.delete(record.id);
         if (currentGenerated?.id === record.id) { currentGenerated = null; previewMode = 'base'; $('ai-result-panel').hidden = true; renderStudioPreview(); }
-        await persist(); renderGeneratedHistory();
+        await persist(); renderGeneratedHistory(); renderHome(); renderCalendar();
       }, 'text-button'));
       card.append(photo, el('h3', '', record.name), el('p', '', `${record.items.length} 件衣物 · ${record.createdAt ? new Date(record.createdAt).toLocaleDateString('zh-CN') : '已保存'}`), actions); return card;
     }));
@@ -757,10 +1026,13 @@
     window.addEventListener('beforeunload', event => { if (aiBusy && aiPending) { event.preventDefault(); event.returnValue = ''; } });
     aiTick = setInterval(() => { if (aiPending && aiBusy) renderAI(); }, 1000);
   }
-  function clearVideo() {
+  function clearVideo(removeStored = true) {
     const video = $('rotation-video'); video.pause(); video.removeAttribute('src'); video.load();
     const studioVideo = $('studio-rotation-video');
     if (studioVideo) { studioVideo.pause(); studioVideo.removeAttribute('src'); studioVideo.load(); studioVideo.hidden = true; }
+    const homeVideo = $('home-video');
+    if (homeVideo) { homeVideo.pause(); homeVideo.removeAttribute('src'); homeVideo.load(); homeVideo.hidden = true; }
+    rotationLookId = '';
     videoContext = null;
     if (previewMode === 'rotation') previewMode = originalOutfit() ? 'example' : 'base';
     if (videoURL) URL.revokeObjectURL(videoURL); videoURL = '';
@@ -768,6 +1040,8 @@
     if ($('studio-video-input')) $('studio-video-input').value = '';
     $('video-scrub').value = 0; $('video-time').textContent = '0:00 / 0:00'; $('video-play').textContent = '播放';
     renderStudioPreview();
+    renderHomeRotation();
+    if (removeStored && db) { const tx = db.transaction('state', 'readwrite'); tx.objectStore('state').delete('rotation'); }
   }
   function rotationContext() {
     return [modelId, state.models.find(model => model.id === modelId)?.image, ...[...selected].sort().flatMap(id => [id, state.items.find(item => item.id === id)?.image])];
@@ -798,14 +1072,16 @@
     }
     if ($('studio-rotation-hint')) $('studio-rotation-hint').textContent = ready ? '左右拖动查看角度' : videoURL ? '这段视频属于导入时的搭配，当前搭配请另行导入' : '导入转身视频后可旋转';
   }
-  function importRotationVideo(file) {
+  function importRotationVideo(file, lookId = currentPage === 'looks' ? activeLookId : previewMode === 'generated' ? currentGenerated?.id : originalOutfit() ? 'example-look' : '', shouldSave = true) {
     if (!file) return;
     if ((!['video/mp4', 'video/quicktime', 'video/webm'].includes(file.type) && !/\.(mp4|mov|webm)$/i.test(file.name)) || file.size > 100 * 1024 * 1024) { toast('请选择 100 MB 以内的 MP4、MOV 或 WebM 视频。'); return; }
-    clearVideo(); videoURL = URL.createObjectURL(file); videoContext = rotationContext();
+    clearVideo(false); videoURL = URL.createObjectURL(file); videoContext = rotationContext(); rotationLookId = lookId || '';
     $('rotation-video').src = videoURL;
-    $('video-label').textContent = `${file.name} · 仅在本次打开中保留`;
+    $('video-label').textContent = file.name || '已保存的转身视频';
     const studioVideo = $('studio-rotation-video');
     if (studioVideo) { studioVideo.src = videoURL; previewMode = 'rotation'; }
+    if ($('home-video')) { $('home-video').src = videoURL; $('home-video').loop = true; renderHomeRotation(); }
+    if (shouldSave) void storeRotation(file);
   }
   const seconds = value => `${Math.floor((Number.isFinite(value) ? value : 0) / 60)}:${String(Math.floor((Number.isFinite(value) ? value : 0) % 60)).padStart(2, '0')}`;
   function setupVideo() {
@@ -818,7 +1094,7 @@
       $('video-empty').hidden = true; $('video-stage').hidden = false;
       $('video-time').textContent = `${seconds(0)} / ${seconds(video.duration)}`;
     });
-    video.addEventListener('error', () => { if (videoURL) { clearVideo(); toast('浏览器无法播放这个格式，建议使用 H.264 编码的 MP4。'); } });
+    video.addEventListener('error', () => { if (videoURL) { clearVideo(false); toast('浏览器无法播放这个格式，建议使用 H.264 编码的 MP4。'); } });
     video.addEventListener('timeupdate', () => { $('video-scrub').value = video.duration ? Math.round(video.currentTime / video.duration * 1000) : 0; $('video-time').textContent = `${seconds(video.currentTime)} / ${seconds(video.duration)}`; });
     video.addEventListener('play', () => { $('video-play').textContent = '暂停'; });
     video.addEventListener('pause', () => { $('video-play').textContent = '播放'; });
@@ -837,7 +1113,7 @@
     $('studio-video-input').addEventListener('change', event => importRotationVideo(event.target.files?.[0]));
     video.addEventListener('loadedmetadata', () => { if (Number.isFinite(video.duration) && video.duration > 0) renderStudioPreview(); });
     for (const event of ['timeupdate','play','pause','ended']) video.addEventListener(event, renderStudioRotation);
-    video.addEventListener('error', () => { if (videoURL) { clearVideo(); toast('这段视频暂时无法播放，请换一段 H.264 编码的 MP4。'); } });
+    video.addEventListener('error', () => { if (videoURL) { clearVideo(false); toast('这段视频暂时无法播放，请换一段 H.264 编码的 MP4。'); } });
     $('studio-rotation-control').addEventListener('input', event => {
       if (!matchingRotation() || !video.duration) return;
       previewMode = 'rotation'; video.pause(); video.currentTime = Number(event.target.value) / 1000 * video.duration; renderStudioPreview();
@@ -881,9 +1157,9 @@
       event.preventDefault();
       if (!modelPhoto || !text($('model-name').value, 60)) { $('model-error').textContent = '请添加全身照片并填写模特名称。'; return; }
       if (state.models.length >= 40) { $('model-error').textContent = '最多可保存 40 个模特，请先整理。'; return; }
-      const model = { id: uid(), name: text($('model-name').value, 60), image: modelPhoto, example: false };
+      const model = { id: uid(), name: text($('model-name').value, 60), image: modelPhoto, example: false, createdAt: new Date().toISOString() };
       if (!fitsBudget({ ...state, models: [...state.models, model] })) { $('model-error').textContent = '衣橱图片已接近 50 MB，请先导出备份并整理。'; return; }
-      state.models.push(model); modelId = model.id; $('model-dialog').close(); renderAll(); if (await persist()) toast('模特已添加，可前往搭配工作台搭配。');
+      state.models.push(model); modelId = model.id; activeLookId = `model-${model.id}`; $('model-dialog').close(); renderAll(); if (currentPage !== 'fitting') navigate('looks'); if (await persist()) toast('人物已保存，可以用这张照片试穿。');
     });
     $('model-select').addEventListener('change', event => { modelId = event.target.value; renderFitting(); });
     $('load-example').addEventListener('click', loadExample);
@@ -891,9 +1167,9 @@
       if (!selected.length || !modelId) return;
       if (state.outfits.length >= 100) { toast('最多可保存 100 套搭配，请先整理。'); return; }
       const name = text($('outfit-name').value, 60) || `我的搭配 ${state.outfits.length + 1}`;
-      const outfit = { id: uid(), name, modelId, itemIds: [...selected] };
+      const outfit = { id: uid(), name, modelId, itemIds: [...selected], createdAt: new Date().toISOString() };
       if (!fitsBudget({ ...state, outfits: [outfit, ...state.outfits] })) { toast('本地衣橱已满，请先导出并整理。'); return; }
-      state.outfits.unshift(outfit); renderOutfits(); if (await persist()) toast(`「${name}」已保存。`);
+      state.outfits.unshift(outfit); renderOutfits(); renderHome(); renderCalendar(); if (await persist()) toast(`「${name}」已保存。`);
     });
     $('show-result').addEventListener('click', () => {
       if (!originalOutfit()) return;
@@ -917,7 +1193,7 @@
     document.querySelectorAll('[data-studio-filter]').forEach(node => node.addEventListener('click', () => { studioFilter = node.dataset.studioFilter; renderFitting(); }));
     $('studio-clear').addEventListener('click', () => { selected = []; renderFitting(); });
     $('studio-recognize').addEventListener('click', openRecognition);
-    $('studio-add').addEventListener('click', () => openItem());
+    if (!$('studio-add').dataset.createAction) $('studio-add').addEventListener('click', () => openItem());
     $('studio-manage-models').addEventListener('click', () => navigate('models'));
     $('studio-video').addEventListener('click', async () => {
       const video = $('studio-rotation-video');
@@ -933,12 +1209,13 @@
     $('studio-preview-example').addEventListener('click', () => { if (originalOutfit()) { previewMode = 'example'; renderStudioPreview(); } });
     $('studio-preview-latest').addEventListener('click', () => { const record = currentGenerated || state.generated[0]; if (record) showGenerated(record); });
     $('studio-preview-open').addEventListener('click', () => { const image = $('fitting-model-image'); if (!image.hidden && image.src) showImage(image.dataset.original || image.src, '原始试穿图片'); });
-    window.addEventListener('hashchange', () => { const page = location.hash.slice(1); if (['fitting','wardrobe','models','about'].includes(page)) navigate(page, false); });
+    window.addEventListener('hashchange', () => { const page = location.hash.slice(1); if (['looks','fitting','wardrobe','models','about'].includes(page)) navigate(page, false); });
   }
   async function init() {
     await openStorage();
     clientId = makeClientId(); try { accessCode = sessionStorage.getItem(AI_CODE_KEY) || ''; } catch (_) {}
-    await restorePending(); bind(); bindAI(); renderAll(); navigate(location.hash.slice(1) || 'fitting', false); window.appReady = true;
+    try { const saved=JSON.parse(sessionStorage.getItem('aiyi-current-selection')||'null'); if(Array.isArray(saved?.selected)){const seen=new Set();selected=saved.selected.filter(id=>{const item=state.items.find(i=>i.id===id);if(!item||seen.has(item.category))return false;seen.add(item.category);return true;});}if(state.models.some(model=>model.id===saved?.modelId))modelId=saved.modelId; }catch(_){}
+    await restorePending(); bind(); bindAI(); bindWoo(); renderAll(); await restoreRotation(); navigate(location.hash.slice(1) || 'looks', false); window.appReady = true;
     if (accessCode) void checkAI(accessCode, true);
   }
   init().catch(() => { status('页面未能初始化，请重新打开文件'); });

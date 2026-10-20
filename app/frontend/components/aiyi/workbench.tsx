@@ -1,244 +1,133 @@
 'use client';
 
-import { Suspense, useEffect, useState, type FormEvent } from 'react';
-import Link from 'next/link';
+import { Suspense, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { signIn, signOut, useSession } from 'next-auth/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Shirt, Layers3, ScanLine, UserRound, Settings2, Plus, Search, ArrowRight, Check, X, Heart, Pencil, Trash2, Upload, HelpCircle, RefreshCw, FolderOpen, LogOut, ChevronRight, Circle, CheckCircle2 } from 'lucide-react';
-import styles from './workbench.module.css';
+import { ArrowRight, CalendarDays, Camera, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Heart, Home, ImagePlus, Layers3, Loader2, Menu, Plus, Search, Settings2, Shirt, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-react';
 import { AISettings, FittingPanel, RecognitionPanel } from './ai-workflows';
-import { ModelsPanel } from './model-rotation';
+import { ModelsPanel, RotationAction } from './model-rotation';
+import { RotationViewer } from './rotation-viewer';
 import { CatalogStudio } from './catalog-studio';
-import { garmentTypes as types, garmentColors as colors, garmentTypeLabel as typeLabel } from './wardrobe-options';
+import { ItemForm, type Item } from './workbench-item-form';
+import { AIJob, AIRequest } from './ai-common';
+import { garmentColors, garmentTypeLabel, tryOnCategory, tryOnCategoryLabels } from './wardrobe-options';
+import ui from './woo-workspace.module.css';
 
 export type Section = 'wardrobe' | 'outfits' | 'fitting' | 'models' | 'body' | 'settings';
-type Item = { id: string; name: string | null; type: string; primary_color: string | null; favorite: boolean; notes: string | null; image_url: string; thumbnail_url?: string; };
-type Outfit = { id: string; name: string | null; occasion: string; items: Item[]; };
-type Capabilities = { ai: { vision: boolean; text: boolean } };
-const navigation = [
-  { id: 'wardrobe', label: '我的衣橱', icon: Shirt },
-  { id: 'outfits', label: '搭配工作台', icon: Layers3 },
-  { id: 'fitting', label: '试衣间', icon: ScanLine },
-  { id: 'models', label: '模特与 360', icon: UserRound },
-  { id: 'body', label: '我的身材', icon: UserRound },
-  { id: 'settings', label: '功能与设置', icon: Settings2 },
-] as const;
-const tops = new Set(['top', 't-shirt', 'shirt', 'blouse', 'sweater', 'hoodie', 'tank-top', 'polo']);
-const bottoms = new Set(['pants', 'jeans', 'shorts', 'skirt', 'trousers']);
-const colorLabel = (color: string | null) => colors.find(([value]) => value === color)?.[1] || color || '颜色未填写';
+type Pane = 'guide' | 'create' | 'recognition' | 'fitting' | 'models' | 'settings' | 'catalog' | 'calendar' | 'body' | null;
+type Outfit = {id: string; name: string | null; occasion: string; items: Item[]};
+type JobPage = {jobs: AIJob[]; total: number; has_more: boolean};
+const filters = [['all', '全部'], ['top', '上衣'], ['outerwear', '外套'], ['bottom', '下装'], ['shoes', '鞋'], ['bag', '包'], ['favorite', '喜欢']] as const;
+const colorHex: Record<string,string> = {white:'#f8f6ef', black:'#252525', gray:'#b5b6b9', beige:'#d9c8ae', blue:'#92acc4', navy:'#273a50', brown:'#986e51', green:'#81927a', red:'#af5148', pink:'#dab4b6', yellow:'#d8bc69', purple:'#a99cb7'};
+const colorLabel = (color: string | null) => garmentColors.find(([value]) => value === color)?.[1] || color || '颜色未填写';
+const dateKey = (value: string) => {const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const season = (value?: string) => {const month = value ? new Date(value).getMonth()+1 : new Date().getMonth()+1; return month >= 3 && month <= 5 ? 'SPRING' : month >= 6 && month <= 8 ? 'SUMMER' : month >= 9 && month <= 11 ? 'AUTUMN' : 'WINTER';};
+const paneTitles: Record<Exclude<Pane,null>,string> = {guide:'先让我们看见完整的你', create:'留下今天的穿搭', recognition:'把衣服收进衣橱', fitting:'创造一个新造型', models:'我的模特与 360', settings:'我的空间', catalog:'整理单品展示图', calendar:'穿搭日历', body:'我的身材'};
 
-function failureMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  if (/duplicate/i.test(message)) return '这张图片已经在衣橱里了，请查看已有衣物。';
-  if (/fetch|backend|connect/i.test(message)) return '暂时连接不到本地服务，请检查服务状态后重试。';
-  return message || '操作没有完成，请重试。';
-}
-
-export function Workbench({ section }: { section: Section }) {
-  const { data: session, status } = useSession();
-  const token = session?.accessToken;
-  const queryClient = useQueryClient();
-  const [loginBusy, setLoginBusy] = useState(false);
-  const [loginError, setLoginError] = useState('');
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [editor, setEditor] = useState<Item | 'new' | null>(null);
-  const [deleting, setDeleting] = useState<Item | null>(null);
-  const [notice, setNotice] = useState('');
-  const [selectedTop, setSelectedTop] = useState('');
-  const [selectedBottom, setSelectedBottom] = useState('');
-  const [outfitName, setOutfitName] = useState('');
-  const [catalogItemId, setCatalogItemId] = useState('');
-
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const headers = new Headers(init.headers);
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-    const response = await fetch(`/api/v1${path}`, { ...init, headers });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      const detail = data.detail;
-      throw new Error(typeof detail === 'string' ? detail : detail?.message || `请求失败（${response.status}）`);
-    }
+export function Workbench({section}: {section: Section}) {
+  const {data:session, status:sessionStatus} = useSession();
+  const token = session?.accessToken, userKey = session?.user?.id || 'local';
+  const cache = useQueryClient();
+  const [view, setView] = useState<'looks'|'wardrobe'>(section === 'wardrobe' ? 'wardrobe' : 'looks');
+  const [pane, setPane] = useState<Pane>(['fitting','models','settings','body'].includes(section) ? section as Pane : null);
+  const [wardrobeTab, setWardrobeTab] = useState<'items'|'looks'>('items');
+  const [filter,setFilter] = useState('all'), [search,setSearch] = useState('');
+  const [selected,setSelected] = useState<string[]>([]), [trayExpanded,setTrayExpanded] = useState(false);
+  const [arrival,setArrival] = useState(''), [activeId,setActiveId] = useState('');
+  const [detailsOpen,setDetailsOpen] = useState(false), [editor,setEditor] = useState<Item|'new'|null>(null);
+  const [deleting,setDeleting] = useState<Item|null>(null), [notice,setNotice] = useState('');
+  const [catalogId,setCatalogId] = useState(''), [loginBusy,setLoginBusy] = useState(false), [loginError,setLoginError] = useState('');
+  const [month,setMonth] = useState(() => new Date(new Date().getFullYear(),new Date().getMonth(),1));
+  const [outfitName,setOutfitName] = useState('');
+  const [guideTarget,setGuideTarget] = useState<'fitting'|'models'>('fitting');
+  const [guideSeen,setGuideSeen] = useState(false);
+  const sheetDrag = useRef<number|null>(null);
+  const request: AIRequest = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
+    const headers = new Headers(init.headers); if(token) headers.set('Authorization',`Bearer ${token}`);
+    const response = await fetch(`/api/v1${path}`,{...init,headers});
+    if(!response.ok) {const data = await response.json().catch(()=>({})); throw new Error(typeof data.detail === 'string' ? data.detail : data.detail?.message || `请求失败（${response.status}）`);}
     return response.status === 204 ? undefined as T : response.json();
-  }
-
-  const health = useQuery({ queryKey: ['aiyi', 'health'], queryFn: () => request<{status: string; checks: {database: string}}>('/health/ready'), retry: false, refetchInterval: 15000 });
-  const capabilities = useQuery({ queryKey: ['aiyi', 'capabilities'], queryFn: () => request<Capabilities>('/capabilities'), retry: false });
-  const items = useQuery({ queryKey: ['aiyi', 'items', session?.user?.id], queryFn: async () => {
-    const loaded: Item[] = [];
-    let page = 1;
-    let total = 0;
-    let hasMore = true;
-    while (hasMore) {
-      const result = await request<{items: Item[]; total: number; has_more: boolean}>(`/items?page_size=100&page=${page}`);
-      loaded.push(...result.items); total = result.total; hasMore = result.has_more; page += 1;
+  };
+  const health = useQuery({queryKey:['aiyi','health'],queryFn:()=>request<{status:string}>('/health/ready'),retry:false,refetchInterval:15000});
+  const items = useQuery({queryKey:['aiyi','items',userKey],enabled:!!token,retry:false,queryFn:async()=>{
+    const loaded:Item[]=[];let page=1,more=true;
+    while(more){const r=await request<{items:Item[];has_more:boolean}>(`/items?page_size=100&page=${page++}`);loaded.push(...r.items);more=r.has_more;}
+    return loaded;
+  }});
+  const jobs = useQuery({queryKey:['aiyi','ai-jobs',userKey,'showcase'],enabled:!!token,retry:false,queryFn:()=>request<JobPage>('/ai/jobs?offset=0&limit=100'),refetchInterval:query=>query.state.data?.jobs?.some(job=>['queued','running'].includes(job.status)) ? 2500 : false});
+  const outfits = useQuery({queryKey:['aiyi','outfits',userKey],enabled:!!token,retry:false,queryFn:()=>request<{outfits:Outfit[];total:number}>('/outfits?page_size=100')});
+  const allItems=items.data || [], allJobs=jobs.data?.jobs || [];
+  const looks=useMemo(()=>allJobs.filter(job=>job.status==='completed' && ['try_on','model','rotation'].includes(job.kind) && (job.result?.image_url || job.result?.frame_urls?.length)),[jobs.data]);
+  const activeLook=looks.find(job=>job.id===activeId) || looks[0];
+  const activeIndex=activeLook ? looks.findIndex(job=>job.id===activeLook.id) : 0;
+  const activeSource=activeLook?.kind==='rotation' ? allJobs.find(job=>job.id===activeLook.result?.source_job_id) || activeLook : activeLook;
+  const activeItems=allItems.filter(item=>activeSource?.result?.item_ids?.includes(item.id));
+  const selectedItems=selected.map(id=>allItems.find(item=>item.id===id)).filter((item):item is Item=>!!item);
+  const visible=allItems.filter(item=>(filter==='all'||(filter==='favorite'?item.favorite:tryOnCategory(item.type)===filter)) && `${item.name||''} ${garmentTypeLabel(item.type)} ${colorLabel(item.primary_color)}`.toLowerCase().includes(search.toLowerCase()));
+  const busyJobs=allJobs.filter(job=>['queued','running','awaiting_confirmation'].includes(job.status));
+  useEffect(()=>{setView(section==='wardrobe'?'wardrobe':'looks');setPane(['fitting','models','settings','body'].includes(section)?section as Pane:null);},[section]);
+  useEffect(()=>{if(items.data)setSelected(ids=>ids.filter(id=>items.data?.some(item=>item.id===id)));},[items.data]);
+  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),5000);return()=>clearTimeout(timer);},[notice]);
+  useEffect(()=>{try{setGuideSeen(localStorage.getItem('aiyi-photo-guide-seen')==='true');}catch{}},[]);
+  function open(next:Pane){if((next==='fitting'||next==='models')&&!guideSeen){setGuideTarget(next);setPane('guide');return;}setPane(next);}
+  function choose(item:Item,event?:MouseEvent<HTMLButtonElement>){
+    const category=tryOnCategory(item.type);if(!category){setEditor(item);return;}
+    setSelected(ids=>ids.includes(item.id)?ids.filter(id=>id!==item.id):[...ids.filter(id=>tryOnCategory(allItems.find(row=>row.id===id)?.type||'')!==category),item.id]);
+    setArrival(item.id);setTimeout(()=>setArrival(''),500);
+    if(event&&!selected.includes(item.id)&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){
+      const image=event.currentTarget.querySelector('img');const rect=image?.getBoundingClientRect();
+      if(image&&rect){const flying=image.cloneNode() as HTMLImageElement;flying.alt='';flying.setAttribute('aria-hidden','true');Object.assign(flying.style,{position:'fixed',left:`${rect.left}px`,top:`${rect.top}px`,width:`${rect.width}px`,height:`${rect.height}px`,objectFit:'contain',pointerEvents:'none',zIndex:'55',borderRadius:'14px',background:'#fff',boxShadow:'0 6px 25px #49352412'});document.body.append(flying);requestAnimationFrame(()=>{const tray=document.querySelector('[aria-label="已选搭配"]')?.getBoundingClientRect();const endX=tray?tray.left+35:innerWidth-150;const endY=tray?tray.top+25:innerHeight-140;const animation=flying.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${endX-rect.left}px,${endY-rect.top}px) scale(.22)`,opacity:.35}],{duration:560,easing:'cubic-bezier(.25,.7,.25,1)',fill:'forwards'});animation.finished.then(()=>flying.remove()).catch(()=>flying.remove());});}
     }
-    return {items: loaded, total};
-  }, enabled: !!token, retry: false });
-  const outfits = useQuery({ queryKey: ['aiyi', 'outfits', session?.user?.id], queryFn: () => request<{outfits: Outfit[]; total: number}>('/outfits?page_size=100'), enabled: !!token && section === 'outfits', retry: false });
-  const allItems = items.data?.items || [];
-  const upper = allItems.filter(item => tops.has(item.type));
-  const lower = allItems.filter(item => bottoms.has(item.type));
-  const visible = allItems.filter(item => {
-    const categoryMatch = filter === 'all' || (filter === 'tops' && tops.has(item.type)) || (filter === 'bottoms' && bottoms.has(item.type)) || (filter === 'favorite' && item.favorite) || (filter === 'other' && !tops.has(item.type) && !bottoms.has(item.type));
-    return categoryMatch && `${item.name || ''} ${typeLabel(item.type)} ${colorLabel(item.primary_color)}`.toLowerCase().includes(search.toLowerCase());
-  });
-  const chosen = [selectedTop, selectedBottom].map(id => allItems.find(item => item.id === id));
-  const online = health.data?.status === 'healthy';
-  const title = navigation.find(item => item.id === section)?.label;
-
-  useEffect(() => { setNotice(''); }, [section]);
-  useEffect(() => {
-    if (items.data) {
-      if (selectedTop && !items.data.items.some(item => item.id === selectedTop)) setSelectedTop('');
-      if (selectedBottom && !items.data.items.some(item => item.id === selectedBottom)) setSelectedBottom('');
-    }
-  }, [items.data, selectedTop, selectedBottom]);
-
-  const update = useMutation({
-    mutationFn: ({id, data}: {id: string; data: Partial<Item>}) => request<Item>(`/items/${id}`, { method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }),
-    onSuccess: () => { queryClient.invalidateQueries({queryKey: ['aiyi', 'items']}); setNotice('已保存衣物信息。'); },
-    onError: error => setNotice(failureMessage(error)),
-  });
-  const remove = useMutation({
-    mutationFn: (id: string) => request(`/items/${id}`, {method: 'DELETE'}),
-    onSuccess: () => { setDeleting(null); queryClient.invalidateQueries({queryKey: ['aiyi']}); setNotice('衣物已删除。'); },
-    onError: error => setNotice(failureMessage(error)),
-  });
-  const saveOutfit = useMutation({
-    mutationFn: () => request('/outfits/studio', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({items: chosen.filter(Boolean).map(item => item!.id), occasion: 'casual', name: outfitName.trim() || '我的日常搭配', mark_worn: false})}),
-    onSuccess: () => {queryClient.invalidateQueries({queryKey: ['aiyi', 'outfits']}); setNotice('搭配已保存，可以在下方查看。'); setOutfitName('');},
-    onError: error => setNotice(failureMessage(error)),
-  });
-
-  async function enterWorkspace() {
-    setLoginBusy(true); setLoginError('');
-    try {
-      const result = await signIn('dev-credentials', { email: 'local@aiyichu.local', name: '本地用户', redirect: false });
-      if (result?.error) setLoginError('本地登录失败，请先启动服务后重试。');
-    } catch { setLoginError('无法进入本地工作区，请重试。'); }
-    finally { setLoginBusy(false); }
   }
+  const update=useMutation({mutationFn:({id,data}:{id:string;data:Partial<Item>})=>request(`/items/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),onSuccess:()=>cache.invalidateQueries({queryKey:['aiyi','items']}),onError:error=>setNotice(error instanceof Error?error.message:'保存失败，请重试。')});
+  const remove=useMutation({mutationFn:(id:string)=>request(`/items/${id}`,{method:'DELETE'}),onSuccess:()=>{setDeleting(null);cache.invalidateQueries({queryKey:['aiyi']});setNotice('衣物已删除。');},onError:error=>setNotice(error instanceof Error?error.message:'删除失败，请重试。')});
+  const saveOutfit=useMutation({mutationFn:()=>request('/outfits/studio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:selected,occasion:'casual',name:outfitName.trim()||'我的日常搭配',mark_worn:false})}),onSuccess:()=>{cache.invalidateQueries({queryKey:['aiyi','outfits']});setOutfitName('');setNotice('这一套已保存到造型。');},onError:error=>setNotice(error instanceof Error?error.message:'保存失败，请重试。')});
+  async function enter(){setLoginBusy(true);setLoginError('');try{const r=await signIn('dev-credentials',{email:'local@aiyichu.local',name:'本地用户',redirect:false});if(r?.error)setLoginError('本地登录失败，请检查服务后重试。');}catch{setLoginError('暂时无法进入本地工作区。');}finally{setLoginBusy(false);}}
+  async function shareLook(){const url=activeLook?.result?.image_url || activeLook?.result?.frame_urls?.[0];if(!url)return;try{if(navigator.share)await navigator.share({title:'爱衣橱 · 我的穿搭',url:new URL(url,location.href).href});else{const a=document.createElement('a');a.href=url;a.download='爱衣橱-我的穿搭';a.click();}}catch(error){if(!(error instanceof DOMException&&error.name==='AbortError'))setNotice('分享未完成，可以使用下载保存图片。');}}
+  function showLook(id:string){setActiveId(id);setView('looks');setPane(null);setDetailsOpen(false);}
+  function stepLook(offset:number){if(looks.length)setActiveId(looks[(activeIndex+offset+looks.length)%looks.length].id);}
+  const palette=activeItems.length?Array.from(new Set(activeItems.map(item=>colorHex[item.primary_color||'']).filter(Boolean))):[];
+  const calendarDays=Array.from({length:42},(_,index)=>{const d=new Date(month.getFullYear(),month.getMonth(),1-month.getDay()+index);return {date:d,key:dateKey(d.toISOString()),inMonth:d.getMonth()===month.getMonth()};});
 
-  return <div className={styles.app}>
-    <aside className={styles.sidebar}>
-      <Link className={styles.brand} href="/workspace/wardrobe"><span className={styles.brandIcon}><Shirt size={23}/></span><span>爱衣橱<small>功能工作台</small></span></Link>
-      <div className={styles.navLabel}>我的空间</div>
-      <nav aria-label="主导航">{navigation.map(({id, label, icon: Icon}) => <Link key={id} href={`/workspace/${id}`} aria-current={section === id ? 'page' : undefined} className={`${styles.navItem} ${section === id ? styles.navActive : ''}`}><Icon size={19}/><span>{label}</span>{section === id && <ChevronRight size={15}/>}</Link>)}</nav>
-      <div className={styles.sidebarBottom}><span className={styles.localPill}>本地开发版</span><p>先跑通功能<br/>再打磨每一次穿搭</p><div className={styles.connection}><span className={online ? styles.greenDot : styles.grayDot}/>{online ? '本地服务已连接' : '等待本地服务'}</div>{token && <button className={styles.logout} onClick={() => signOut({callbackUrl: '/workspace/wardrobe'})}><LogOut size={14}/>退出工作区</button>}</div>
-    </aside>
-    <main className={styles.main}>
-      <header className={styles.topbar}><span>爱衣橱 <ChevronRight size={13}/> {title}</span><span className={styles.version}>功能工作台 v0.3</span></header>
-      <div className={styles.content}>
-        <div className={styles.pageHeading}><div><div className={styles.eyebrow}>YOUR EVERYDAY WARDROBE</div><h1>{title}</h1><p>{section === 'wardrobe' ? '从你已有的每一件衣服开始。' : section === 'outfits' ? '把真实衣物组合在一起，找到今天想穿的一套。' : section === 'fitting' ? '让选中的搭配，有一个直观的上身参考。' : section === 'models' ? '保存真实模特照片，查看可转动的穿搭效果。' : section === 'body' ? '建立一张接近自己体型的专属模特底图。' : '查看哪些功能已经可用，以及下一步要接通什么。'}</p></div>{section === 'wardrobe' && token && <button className={styles.primary} onClick={() => setEditor('new')}><Plus size={17}/>手动添加</button>}</div>
-
-        {notice && <div role="status" className={styles.notice}>{notice}<button onClick={() => setNotice('')} aria-label="关闭提示"><X size={16}/></button></div>}
-        {(!token || status === 'loading') ? <section className={styles.welcome}>
-          <div className={styles.welcomeIcon}><FolderOpen size={32}/></div><h2>开始整理你的第一件衣物</h2><p>这是本机上的功能验证空间。衣物与搭配会实际保存，刷新页面后仍可查看。</p><p className={styles.small}>目前使用本地开发账户，尚未接入正式注册登录。</p>
-          <button className={styles.primary} disabled={status === 'loading' || loginBusy || !online} onClick={enterWorkspace}>{loginBusy ? '正在进入…' : status === 'loading' ? '正在加载…' : '进入本地工作区'}<ArrowRight size={16}/></button>
-          {(!online || loginError || session?.syncError) && <p role="alert" className={styles.error}>{loginError || (session?.syncError ? '账户连接失败，请重试本地登录。' : '本地服务尚未就绪，连接后即可进入。')}</p>}
-        </section> : <>
-        {section === 'wardrobe' && <>
-          <div className={styles.summary}><div><strong>{items.data?.total ?? '—'}</strong><span>全部衣物</span></div><div><strong>{upper.length}</strong><span>上衣</span></div><div><strong>{lower.length}</strong><span>下装</span></div><div><strong>{allItems.filter(item => item.favorite).length}</strong><span>我的喜欢</span></div><p><CheckCircle2 size={17}/>支持 AI 识别后确认入库<span>也可手动填写保存</span></p></div>
-          <RecognitionPanel request={request} userKey={session?.user?.id || 'local'}/>
-          <div className={styles.toolbar}><div className={styles.filters}>{[['all','全部'],['tops','上衣'],['bottoms','下装'],['other','其他'],['favorite','喜欢']].map(([id,label]) => <button key={id} aria-pressed={filter === id} className={filter === id ? styles.filterActive : ''} onClick={() => setFilter(id)}>{label}</button>)}</div><label className={styles.search}><Search size={16}/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索名称、类别、颜色" aria-label="搜索衣物"/></label></div>
-          {items.isLoading ? <p role="status" className={styles.loading}>正在读取你的衣橱…</p> : items.isError ? <ErrorPanel message={failureMessage(items.error)} retry={() => items.refetch()}/> : visible.length ? <div className={styles.grid}>{visible.map(item => <article key={item.id} className={styles.itemCard}>
-            <div className={styles.itemImage}><img src={item.thumbnail_url || item.image_url} alt={item.name || typeLabel(item.type)} loading="lazy"/><button disabled={update.isPending} className={`${styles.favorite} ${item.favorite ? styles.favorited : ''}`} onClick={() => update.mutate({id: item.id, data: {favorite: !item.favorite}})} aria-label={`${item.favorite ? '取消喜欢' : '喜欢'}${item.name || '衣物'}`}><Heart size={17} fill={item.favorite ? 'currentColor' : 'none'}/></button></div>
-            <div className={styles.itemInfo}><h2>{item.name || '未命名衣物'}</h2><p>{typeLabel(item.type)}<span>·</span>{colorLabel(item.primary_color)}</p><div className={styles.itemActions}><button onClick={() => setEditor(item)}><Pencil size={13}/>编辑</button><button onClick={() => {setCatalogItemId(item.id); document.getElementById('catalog-studio')?.scrollIntoView({block: 'start'});}}>生成单品图</button><button onClick={() => setDeleting(item)} aria-label={`删除${item.name || '衣物'}`}><Trash2 size={13}/>删除</button></div></div>
-          </article>)}</div> : <Empty icon={Shirt} title={allItems.length ? '没有找到对应衣物' : '衣橱里还没有衣服'} text={allItems.length ? '试试其他分类，或换一个搜索关键词。' : '上传一张清晰的单件衣物照片，填好名称和类别，就能保存到自己的衣橱。'} action={!allItems.length ? <button className={styles.primary} onClick={() => setEditor('new')}><Plus size={16}/>添加第一件衣物</button> : undefined}/>}
-          <div className={styles.helpLine}><HelpCircle size={15}/>先录入几件常穿的上衣和裤子，再去搭配工作台组合。</div>
-          <CatalogStudio request={request} userKey={session?.user?.id || 'local'} items={allItems} selectedItemId={catalogItemId}/>
-        </>}
-
-        {section === 'outfits' && <>
-          <div className={styles.inlineNote}><HelpCircle size={17}/><div><strong>当前可以手动搭配并保存</strong><p>AI 推荐尚未启用。先用自己上传的衣物，验证组合与保存流程。</p></div></div>
-          {items.isLoading ? <p className={styles.loading}>正在读取衣物…</p> : items.isError ? <ErrorPanel message={failureMessage(items.error)} retry={() => items.refetch()}/> : <div className={styles.builder}>
-            <div><h2>组合一套搭配</h2><label className={styles.field}>选择上衣<select value={selectedTop} onChange={event => setSelectedTop(event.target.value)}><option value="">{upper.length ? '请选择一件上衣' : '请先添加上衣'}</option>{upper.map(item => <option value={item.id} key={item.id}>{item.name || typeLabel(item.type)}</option>)}</select></label><label className={styles.field}>选择下装<select value={selectedBottom} onChange={event => setSelectedBottom(event.target.value)}><option value="">{lower.length ? '请选择一件下装' : '请先添加裤子或半裙'}</option>{lower.map(item => <option value={item.id} key={item.id}>{item.name || typeLabel(item.type)}</option>)}</select></label><label className={styles.field}>搭配名称<input maxLength={100} value={outfitName} onChange={event => setOutfitName(event.target.value)} placeholder="例如：周末的舒服搭配"/></label><button className={styles.primary} disabled={!chosen.every(Boolean) || saveOutfit.isPending} onClick={() => saveOutfit.mutate()}><Check size={16}/>{saveOutfit.isPending ? '正在保存…' : '保存这套搭配'}</button></div>
-            <div className={styles.collage}><span className={styles.collageLabel}>单品组合预览</span><div>{chosen.map((item,index) => <div className={styles.slot} key={index}>{item ? <><img src={item.image_url} alt={item.name || typeLabel(item.type)}/><span>{item.name || typeLabel(item.type)}</span></> : <><Shirt size={32}/><span>{index ? '选择下装' : '选择上衣'}</span></>}</div>)}</div><p>展示衣物原图，尚未生成真人上身效果。</p></div>
-          </div>}
-          <h2 className={styles.sectionHeading}>已保存的搭配 <span>{outfits.data?.total ?? 0}</span></h2>
-          {outfits.isError ? <ErrorPanel message={failureMessage(outfits.error)} retry={() => outfits.refetch()}/> : outfits.isLoading ? <p className={styles.loading}>正在读取搭配…</p> : !outfits.data?.outfits.length ? <p className={styles.small}>保存第一套搭配后，会显示在这里。</p> : <div className={styles.outfitGrid}>{outfits.data.outfits.map(outfit => <article className={styles.savedOutfit} key={outfit.id}><div>{outfit.items.map(item => <img key={item.id} src={item.thumbnail_url || item.image_url} alt={item.name || typeLabel(item.type)}/>)}</div><h3>{outfit.name || '我的搭配'}</h3><p>{outfit.items.map(item => item.name || typeLabel(item.type)).join(' ＋ ')}</p><span className={styles.softLabel}>手动搭配</span></article>)}</div>}
-        </>}
-
-        {section === 'fitting' && <Suspense fallback={<p className={styles.small}>正在读取试衣间…</p>}><FittingPanel request={request} userKey={session?.user?.id || 'local'} items={allItems} itemsLoading={items.isLoading} itemsError={items.isError ? failureMessage(items.error) : undefined} retryItems={() => items.refetch()}/></Suspense>}
-
-        {section === 'models' && <ModelsPanel request={request} userKey={session?.user?.id || 'local'}/>}
-
-        {section === 'body' && <section className={styles.future}>
-          <span className={styles.softLabel}>后续阶段接入</span><div className={styles.futureIcon}><UserRound size={42}/></div><h2>先确定一张属于你的身材底图</h2><p>这里将支持填写身高、体重、围度与比例，调整固定模特的体型，并保存确认后的底图。当前尚未采集身体数据，试衣间可以先上传自己的人物照片。</p><div className={styles.steps}>{['选择基础模特','填写和调整身材特征','确认并保存底图版本'].map((step,index) => <div key={step}><span>{index + 1}</span>{step}</div>)}</div><Link className={styles.secondary} href="/workspace/fitting">去试衣间上传人物照片<ArrowRight size={16}/></Link><p className={styles.small}>上身图用于外观参考，不作为真实尺码或松紧判断。</p>
-        </section>}
-
-        {section === 'settings' && <>
-          <div className={styles.settingsIntro}><h2>为每项功能选择对应的服务</h2><p>识别、图片生成、360 视频独立配置。模特上传和转身视频导入可直接在本机使用，任务与结果会保存在当前账户。</p></div>
-          <AISettings request={request} userKey={session?.user?.id || 'local'}/>
-          <div className={styles.statusList}>{[
-            ['衣物管理', '上传、分类、搜索、编辑、喜欢和删除', true],
-            ['手动搭配', '选择自己的上衣和下装，保存组合', true],
-            ['AI 衣物识别', '识别、逐件确认、可选单品图生成，使用识别服务', false],
-            ['模特库与本地转身', '保存人物照片，导入视频提取 61 帧，拖动或播放查看', true],
-            ['AI 穿搭推荐', capabilities.data?.ai.text ? '上游已启用，工作台入口待验证' : '尚未接入，当前使用手动组合', false],
-            ['个人身材模特', '待接入模特素材、身体数据和图像编辑', false],
-            ['真人试穿预览', '选模特或上传照片，生成试穿图，并可继续生成 360 转身', false],
-          ].map(([label,description,ready]) => <div key={String(label)}><span className={ready ? styles.statusIconReady : styles.statusIcon}>{ready ? <CheckCircle2 size={20}/> : <Circle size={20}/>}</span><div><h3>{label}</h3><p>{description}</p></div><span className={ready ? styles.readyLabel : styles.softLabel}>{ready ? '本地可用' : label === 'AI 衣物识别' || label === '真人试穿预览' ? '需对应服务' : '待接入'}</span></div>)}</div>
-          <div className={styles.system}><h3>本地运行状态</h3><div><span>数据服务</span><strong>{online ? '已连接' : '未连接'}</strong></div><div><span>数据库</span><strong>{health.data?.checks?.database === 'healthy' ? '正常' : '等待连接'}</strong></div><div><span>当前账户</span><strong>本地开发账户</strong></div><p>此工作区仅供本机验证，正式登录与公开部署将在后续阶段配置。</p><a href="https://github.com/Anyesh/wardrowbe" target="_blank" rel="noreferrer">基于 Wardrowbe 开源项目（MIT）</a></div>
-        </>}
-        </>}
+  return <div className={ui.app}>
+    <header className={ui.header}><button className={ui.wordmark} onClick={()=>{setView('looks');setPane(null);}}>爱衣橱<span>AIYI</span></button><span className={ui.headerNote}>YOUR EVERYDAY, REIMAGINED.</span><div className={ui.headerActions}><button className={ui.roundButton} disabled={!token} aria-label="打开穿搭日历" onClick={()=>open('calendar')}><CalendarDays size={19}/></button><button className={ui.roundButton} disabled={!token} aria-label="打开我的空间与设置" onClick={()=>open('settings')}><Menu size={21}/></button></div></header>
+    {!token ? <main className={ui.welcome}><span className={ui.backdropWord}>EVERYDAY</span><div className={ui.welcomeContent}><span className={ui.micro}>一件件收好，一套套喜欢。</span><h1>每一天，<br/>穿成自己喜欢的样子。</h1><p>自己的衣橱，真实的试穿。把喜欢的搭配留在这里。</p><button className={ui.blackButton} disabled={sessionStatus==='loading'||loginBusy||health.data?.status!=='healthy'} onClick={enter}>{loginBusy?<Loader2 className={ui.spin} size={17}/>:<ArrowRight size={17}/>} {loginBusy?'正在进入…':sessionStatus==='loading'?'正在读取…':'进入我的衣橱'}</button><small>本机开发账户 · 衣物与结果保存在本地服务</small>{(loginError||health.isError||session?.syncError)&&<p role="alert" className={ui.error}>{loginError||'本地服务暂未连接，请启动后重试。'}</p>}</div></main> : <>
+    {view==='looks' ? <main className={ui.looksPage} aria-label="我的造型">
+      <div className={ui.heroStage}><span className={ui.backdropWord}>{season(activeLook?.created_at)}</span>{activeLook ? <div key={activeLook.id} className={ui.lookImage}>{activeLook.result?.frame_urls?.length ? <div className={ui.homeRotation}><RotationViewer immersive frames={activeLook.result.frame_urls} name={activeLook.result.name||'我的造型'}/></div>:<img src={activeLook.result?.image_url} alt={activeLook.result?.name||'我的人物造型'}/>}</div>:<div className={ui.emptyLook}><UserRound size={72} strokeWidth={.7}/><h1>从一张全身照开始</h1><p>留住今天的穿搭，让每一套喜欢的造型动起来。</p><button className={ui.blackButton} onClick={()=>open('create')}><Plus size={17}/>创建我的第一个造型</button></div>}
+      <button className={`${ui.roundButton} ${ui.prevLook}`} disabled={looks.length<2} aria-label="上一个造型" onClick={()=>stepLook(-1)}><ChevronLeft size={23}/></button><button className={`${ui.roundButton} ${ui.nextLook}`} disabled={looks.length<2} aria-label="下一个造型" onClick={()=>stepLook(1)}><ChevronRight size={23}/></button>
+      {activeLook&&<span className={ui.lookCounter}>{String(activeIndex+1).padStart(2,'0')} <i>/</i> {String(looks.length).padStart(2,'0')}</span>}
       </div>
-      <footer className={styles.footer}>爱衣橱 · 先用好已经拥有的衣服<span>本地功能验证阶段</span></footer>
-    </main>
-    <Dialog.Root open={editor !== null} onOpenChange={open => {if (!open) setEditor(null);}}><Dialog.Portal><Dialog.Overlay className={styles.overlay}/><Dialog.Content className={styles.dialog} onInteractOutside={event => event.preventDefault()}><Dialog.Title>{editor === 'new' ? '添加衣物' : '编辑衣物'}</Dialog.Title><Dialog.Description>保存一件真实衣物，开始建立自己的衣橱。</Dialog.Description><Dialog.Close className={styles.close} aria-label="关闭衣物表单"><X size={20}/></Dialog.Close>{editor && <ItemForm key={editor === 'new' ? 'new' : editor.id} item={editor === 'new' ? null : editor} request={request} onSaved={() => {setEditor(null); queryClient.invalidateQueries({queryKey: ['aiyi', 'items']}); setNotice('衣物已保存到你的衣橱。');}}/>}</Dialog.Content></Dialog.Portal></Dialog.Root>
-    <Dialog.Root open={!!deleting} onOpenChange={open => {if (!open && !remove.isPending) setDeleting(null);}}><Dialog.Portal><Dialog.Overlay className={styles.overlay}/><Dialog.Content className={styles.dialog}><Dialog.Title>删除这件衣物？</Dialog.Title><Dialog.Description>“{deleting?.name || '未命名衣物'}”及其图片将被移除。此操作无法撤销。</Dialog.Description><div className={styles.dialogActions}><button className={styles.secondary} disabled={remove.isPending} onClick={() => setDeleting(null)}>保留衣物</button><button className={styles.danger} disabled={remove.isPending} onClick={() => deleting && remove.mutate(deleting.id)}>{remove.isPending ? '删除中…' : '确认删除'}</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+      <section className={`${ui.lookSheet} ${detailsOpen?ui.lookSheetExpanded:''}`} onPointerDown={event=>{if((event.target as HTMLElement).closest('button,a,input'))return;sheetDrag.current=event.clientY;}} onPointerUp={event=>{if(sheetDrag.current!==null&&Math.abs(event.clientY-sheetDrag.current)>30)setDetailsOpen(event.clientY<sheetDrag.current);sheetDrag.current=null;}}>
+        <button className={ui.sheetHandle} onClick={()=>setDetailsOpen(value=>!value)} aria-expanded={detailsOpen} aria-label={detailsOpen?'收起造型详情':'展开造型详情'}><span/></button>
+        <div className={ui.sheetTopline}><div className={ui.palette} aria-label="造型配色">{palette.length?palette.map(color=><span key={color} style={{background:color}}/>):<span className={ui.paletteLabel}>今天也穿自己喜欢的</span>}</div><button className={ui.dateButton} onClick={()=>open('calendar')}><CalendarDays size={15}/>{activeLook?dateKey(activeLook.created_at).replaceAll('-','.'):'我的穿搭日记'}</button></div>
+        {detailsOpen&&<div className={ui.lookDetails}><div className={ui.detailHeading}><div><span className={ui.micro}>{activeLook?.kind==='rotation'?'IN MOTION':activeLook?.kind==='model'?'MY MODEL':'MY LOOK'}</span><h2>{activeLook?.result?.name||'属于今天的这一套'}</h2></div><span>{activeItems.length} 件单品</span></div>{activeItems.length?<div className={ui.lookItems}>{activeItems.map(item=><button key={item.id} onClick={()=>{setView('wardrobe');setFilter(tryOnCategory(item.type)||'all');setDetailsOpen(false);}}><img src={item.thumbnail_url||item.image_url} alt={item.name||'单品'}/><span>{item.name||garmentTypeLabel(item.type)}</span></button>)}</div>:<p className={ui.softText}>{activeLook?.kind==='model'?'这张人物照片已保存，可以用它创造新搭配。':'选择衣橱里的单品，开始下一次搭配。'}</p>}<button className={ui.textButton} onClick={()=>open('fitting')}>搭配一个新造型 <ArrowRight size={14}/></button></div>}
+        <div className={ui.lookActions}><button className={ui.roundButton} disabled={!activeLook} onClick={shareLook} aria-label="分享或下载当前造型"><Upload size={19}/></button>{activeLook&&activeLook.kind!=='rotation'&&<RotationAction request={request} userKey={userKey} sourceJobId={activeLook.id}/>}<button className={ui.roundButton} onClick={()=>open('fitting')} aria-label="创建新的试穿"><Plus size={20}/></button></div>
+      </section>
+    </main>:<main className={ui.wardrobePage}>
+      <div className={ui.wardrobeHeading}><div><span className={ui.micro}>A LITTLE COLLECTION OF YOU</span><h1>我的衣橱<span>{allItems.length}</span></h1></div><button className={ui.roundButton} aria-label="添加衣物" onClick={()=>open('create')}><Plus size={22}/></button></div>
+      <div className={ui.wardrobeToolbar}><div className={ui.segment}><button aria-pressed={wardrobeTab==='items'} onClick={()=>setWardrobeTab('items')}>单品</button><button aria-pressed={wardrobeTab==='looks'} onClick={()=>setWardrobeTab('looks')}>造型</button></div><label className={ui.search}><Search size={16}/><input aria-label="搜索衣物" value={search} onChange={event=>setSearch(event.target.value)} placeholder="找一件喜欢的单品"/></label></div>
+      {wardrobeTab==='items'?<><div className={ui.filters}>{filters.map(([id,label])=><button key={id} className={filter===id?ui.activeFilter:''} aria-pressed={filter===id} onClick={()=>setFilter(id)}>{label}</button>)}</div><div className={ui.miniStats}><div><strong>{allItems.filter(item=>tryOnCategory(item.type)==='top').length}</strong><span>上衣</span></div><div><strong>{allItems.filter(item=>tryOnCategory(item.type)==='bottom').length}</strong><span>下装</span></div><span>点击单品加入搭配 · 同类会自动替换</span></div>
+        {items.isPending?<p className={ui.softText}>正在打开你的衣橱…</p>:items.isError?<div role="alert" className={ui.error}>衣橱暂时没有加载成功。<button onClick={()=>items.refetch()}>重新读取</button></div>:!visible.length?<div className={ui.wardrobeEmpty}><Shirt size={48} strokeWidth={.8}/><h2>{allItems.length?'没有找到这件衣服':'把第一件喜欢的衣服收好'}</h2><p>上传单品或整套穿搭照片，识别后逐件确认入库。</p><button className={ui.blackButton} onClick={()=>open('recognition')}><ImagePlus size={17}/>添加衣物</button></div>:<div className={ui.shelves}>{[...(['top','outerwear','bottom','shoes','bag','other'] as const)].map(category=>{const shelf=visible.filter(item=>(tryOnCategory(item.type)||'other')===category);return shelf.length?<section className={ui.shelf} key={category}><div className={ui.shelfTitle}><h2>{category==='other'?'其他单品':tryOnCategoryLabels[category]}</h2><span>{shelf.length} 件</span></div><div className={ui.shelfItems}>{shelf.map(item=><article key={item.id} className={`${ui.garment} ${selected.includes(item.id)?ui.garmentSelected:''} ${arrival===item.id?ui.garmentArriving:''}`}><button className={ui.garmentImage} aria-label={`${selected.includes(item.id)?'从搭配移除':'加入搭配'}${item.name||garmentTypeLabel(item.type)}`} aria-pressed={selected.includes(item.id)} onClick={event=>choose(item,event)}><img src={item.thumbnail_url||item.image_url} alt={item.name||garmentTypeLabel(item.type)} loading="lazy"/>{selected.includes(item.id)&&<span className={ui.selectedCheck}><Check size={12}/></span>}</button><h3>{item.name||'未命名单品'}</h3><p>{garmentTypeLabel(item.type)}<span>·</span>{colorLabel(item.primary_color)}</p><div className={ui.itemActions}><button onClick={()=>setEditor(item)}>编辑</button><button aria-label={`${item.favorite?'取消喜欢':'喜欢'}${item.name||'衣物'}`} onClick={()=>update.mutate({id:item.id,data:{favorite:!item.favorite}})}><Heart size={13} fill={item.favorite?'currentColor':'none'}/></button><button aria-label={`删除${item.name||'衣物'}`} onClick={()=>setDeleting(item)}><Trash2 size={13}/></button><button aria-label={`生成${item.name||'衣物'}单品图`} onClick={()=>{setCatalogId(item.id);open('catalog');}}><Sparkles size={13}/></button></div></article>)}</div></section>:null;})}</div>}
+      </>:<div className={ui.archiveGrid}>{looks.map(look=><button key={look.id} className={ui.lookCard} onClick={()=>showLook(look.id)}><div><img src={look.result?.image_url||look.result?.frame_urls?.[0]} alt={look.result?.name||'已保存造型'}/>{look.kind==='rotation'&&<span>360°</span>}</div><strong>{look.result?.name||'我的日常造型'}</strong><small>{dateKey(look.created_at).replaceAll('-','.')}</small></button>)}{(outfits.data?.outfits||[]).map(outfit=><button key={outfit.id} className={ui.lookCard} onClick={()=>{setSelected(outfit.items.filter(item=>tryOnCategory(item.type)).map(item=>item.id));setTrayExpanded(true);}}><div className={ui.outfitCollage}>{outfit.items.map(item=><img key={item.id} src={item.thumbnail_url||item.image_url} alt={item.name||'单品'}/>)}</div><strong>{outfit.name||'我的搭配'}</strong><small>单品组合 · 点击继续搭配</small></button>)}{!looks.length&&!outfits.data?.outfits?.length&&<div className={ui.wardrobeEmpty}><Layers3 size={42}/><h2>你的造型，会在这里相遇</h2><button className={ui.blackButton} onClick={()=>open('fitting')}>创造一个新造型</button></div>}</div>}
+    </main>}
+    {busyJobs.length>0&&<div className={ui.activityDock}>{busyJobs.slice(0,2).map(job=><button key={job.id} onClick={()=>open(job.kind==='recognition'?'recognition':job.kind==='rotation'?'models':'fitting')}><Loader2 className={ui.spin} size={15}/><span>{job.kind==='recognition'?'识别衣物':job.kind==='rotation'?'生成 360':'创造造型'}<small>{job.stage||'正在处理中'} {job.progress||0}%</small></span><ChevronRight size={14}/></button>)}</div>}
+    {view==='wardrobe'&&selectedItems.length>0&&<aside className={`${ui.selectionTray} ${trayExpanded?ui.trayExpanded:''}`} aria-label="已选搭配"><button className={ui.trayToggle} aria-expanded={trayExpanded} onClick={()=>setTrayExpanded(value=>!value)}><span className={ui.trayThumbs}>{selectedItems.slice(0,3).map(item=><img key={item.id} src={item.thumbnail_url||item.image_url} alt=""/>)}</span><span>已选 {selectedItems.length} 件<small>组合一点新的自己</small></span>{trayExpanded?<ChevronDown size={16}/>:<ChevronUp size={16}/>}</button>{trayExpanded&&<div className={ui.trayContents}><div className={ui.trayItems}>{selectedItems.map(item=><div key={item.id}><img src={item.thumbnail_url||item.image_url} alt={item.name||'已选衣物'}/><button aria-label={`移除${item.name||'单品'}`} onClick={()=>setSelected(ids=>ids.filter(id=>id!==item.id))}><X size={12}/></button><span>{item.name||garmentTypeLabel(item.type)}</span></div>)}</div><label className={ui.trayName}>给这一套起个名字<input value={outfitName} onChange={event=>setOutfitName(event.target.value)} maxLength={100} placeholder="例如：周末去看展"/></label><button className={ui.textButton} disabled={saveOutfit.isPending} onClick={()=>saveOutfit.mutate()}>{saveOutfit.isPending?'正在保存…':'先保存为搭配'}</button></div>}<button className={ui.blackButton} disabled={!selected.length} onClick={()=>open('fitting')}>试穿这一套 <ArrowRight size={16}/></button></aside>}
+    <nav className={ui.bottomNav} aria-label="主导航"><button className={view==='looks'?ui.navActive:''} aria-label="造型首页" aria-current={view==='looks'?'page':undefined} onClick={()=>{setView('looks');setPane(null);}}><Home size={21} fill={view==='looks'?'currentColor':'none'}/><span>造型</span></button><button className={ui.cameraNav} aria-label="拍照与添加" onClick={()=>open('create')}><Camera size={23}/></button><button className={view==='wardrobe'?ui.navActive:''} aria-label="我的衣橱" aria-current={view==='wardrobe'?'page':undefined} onClick={()=>{setView('wardrobe');setPane(null);}}><Shirt size={21}/><span>衣橱</span></button></nav>
+    </>}
+    {notice&&<div role="status" className={ui.toast}>{notice}<button aria-label="关闭提示" onClick={()=>setNotice('')}><X size={14}/></button></div>}
+    <Dialog.Root open={!!pane&&!!token} onOpenChange={value=>{if(!value)setPane(null);}}><Dialog.Portal><Dialog.Overlay className={ui.overlay}/><Dialog.Content className={`${ui.sheet} ${pane==='settings'?ui.settingsSheet:''} ${['create','guide','calendar','body'].includes(pane||'')?ui.smallSheet:ui.workflowSheet}`}><div className={ui.modalHandle}/><div className={ui.sheetHeader}><div><span className={ui.micro}>{pane==='settings'?'MY SPACE':pane==='calendar'?'LOOKS THROUGH THE DAYS':'MAKE IT YOURS'}</span><Dialog.Title>{pane?paneTitles[pane]:''}</Dialog.Title></div><Dialog.Close className={ui.roundButton} aria-label="关闭面板"><X size={19}/></Dialog.Close></div><Dialog.Description className={ui.srOnly}>在爱衣橱中继续操作，可关闭面板回到当前页面。</Dialog.Description><div className={`${ui.sheetBody} ${ui.workflowContent}`}>
+      {pane==='guide'&&<div className={ui.photoGuide}><div className={ui.guideFrame}><span/><span/><span/><span/><svg viewBox="0 0 150 300" aria-hidden="true"><circle cx="75" cy="35" r="18"/><path d="M51 62Q75 55 99 62L115 149Q117 160 108 161Q100 160 100 151L92 110L94 176L103 267Q104 278 94 278Q85 278 84 268L75 196L66 268Q65 278 56 278Q46 278 47 267L56 176L58 110L50 151Q50 160 42 161Q33 160 35 149Z"/></svg><span className={ui.guideCaption}>头顶、双手和鞋子都在画面里</span></div><h3>选一张自然站姿的全身照</h3><p>光线均匀，身体无遮挡。简单背景和清晰的衣服边缘，会让试穿更自然。</p><button className={ui.blackButton} onClick={()=>{setGuideSeen(true);try{localStorage.setItem('aiyi-photo-guide-seen','true');}catch{}setPane(guideTarget);}}>知道了，选择照片 <ArrowRight size={16}/></button></div>}
+      {pane==='create'&&<><p className={ui.softText}>从一张照片，开始今天的灵感。</p><div className={ui.createActions}><button onClick={()=>open('recognition')}><ImagePlus size={25}/><span><strong>拍照 / 上传衣物</strong><small>识别衣物，确认后收进衣橱</small></span><ArrowRight size={18}/></button><button onClick={()=>open('fitting')}><Sparkles size={25}/><span><strong>搭配一个新造型</strong><small>选一张人物照，穿上衣橱里的单品</small></span><ArrowRight size={18}/></button><button onClick={()=>open('models')}><UserRound size={25}/><span><strong>我的人物与 360</strong><small>保存全身照，导入或生成转身展示</small></span><ArrowRight size={18}/></button><button onClick={()=>{setPane(null);setEditor('new');}}><Plus size={25}/><span><strong>手动添加单品</strong><small>上传图片，自己填写名称与分类</small></span><ArrowRight size={18}/></button></div></>}
+      {pane==='recognition'&&<RecognitionPanel request={request} userKey={userKey}/>}
+      {pane==='fitting'&&<Suspense fallback={<p>正在准备试衣间…</p>}><FittingPanel request={request} userKey={userKey} items={allItems} initialSelected={selected} initialModelId={activeLook?.kind==='model'?activeLook.id:undefined} itemsLoading={items.isPending} itemsError={items.isError?'衣物读取失败，请重试。':undefined} retryItems={()=>items.refetch()}/></Suspense>}
+      {pane==='models'&&<ModelsPanel request={request} userKey={userKey}/>}
+      {pane==='catalog'&&<CatalogStudio request={request} userKey={userKey} items={allItems} selectedItemId={catalogId}/>}
+      {pane==='settings'&&<><div className={ui.accountCard}><div><UserRound size={24}/></div><span><strong>{session?.user?.name||'我的爱衣橱'}</strong><small>本机开发账户 · {health.data?.status==='healthy'?'服务已连接':'等待服务连接'}</small></span></div><div className={ui.settingsLinks}><button onClick={()=>open('models')}>人物模特与转身记录<ChevronRight size={16}/></button><button onClick={()=>open('body')}>身材与模特<ChevronRight size={16}/></button></div><h3 className={ui.settingsLabel}><Settings2 size={15}/>AI 服务设置</h3><AISettings request={request} userKey={userKey}/><button className={ui.textButton} onClick={()=>signOut({callbackUrl:'/workspace/outfits'})}>退出本地工作区</button></>}
+      {pane==='body'&&<div className={ui.wardrobeEmpty}><UserRound size={48} strokeWidth={1}/><h2>从真实的你开始</h2><p>当前可以上传全身照作为试穿模特。按身高、围度调整模特的功能尚未接通。</p><button className={ui.blackButton} onClick={()=>open('models')}>保存我的人物照片 <ArrowRight size={16}/></button></div>}
+      {pane==='calendar'&&<><div className={ui.monthHeading}><button className={ui.roundButton} aria-label="上个月" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()-1,1))}><ChevronLeft size={18}/></button><h3>{month.getFullYear()} 年 {month.getMonth()+1} 月</h3><button className={ui.roundButton} aria-label="下个月" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()+1,1))}><ChevronRight size={18}/></button></div><div className={ui.calendarWeek}>{['日','一','二','三','四','五','六'].map(day=><span key={day}>{day}</span>)}</div><div className={ui.calendarGrid}>{calendarDays.map(day=>{const dayLooks=looks.filter(look=>dateKey(look.created_at)===day.key);return <div key={day.key} className={`${ui.calendarDay} ${!day.inMonth?ui.outsideMonth:''}`}><span>{day.date.getDate()}</span>{dayLooks.length>0&&<button aria-label={`查看${day.key}的造型`} onClick={()=>showLook(dayLooks[0].id)}><img src={dayLooks[0].result?.image_url||dayLooks[0].result?.frame_urls?.[0]} alt=""/>{dayLooks.length>1&&<small>+{dayLooks.length-1}</small>}</button>}</div>;})}</div><p className={ui.softText}>按照造型的生成日期记录，点击人物回到那一天。</p></>}
+    </div></Dialog.Content></Dialog.Portal></Dialog.Root>
+    <Dialog.Root open={!!editor} onOpenChange={value=>{if(!value)setEditor(null);}}><Dialog.Portal><Dialog.Overlay className={ui.overlay}/><Dialog.Content className={`${ui.sheet} ${ui.smallSheet}`}><div className={ui.sheetHeader}><Dialog.Title>{editor==='new'?'添加衣物':'编辑衣物'}</Dialog.Title><Dialog.Close className={ui.roundButton} aria-label="关闭衣物表单"><X size={18}/></Dialog.Close></div><Dialog.Description className={ui.srOnly}>保存一件真实衣物，继续整理自己的衣橱。</Dialog.Description><div className={`${ui.sheetBody} ${ui.workflowContent}`}>{editor&&<ItemForm key={editor==='new'?'new':editor.id} item={editor==='new'?null:editor} request={request} onSaved={()=>{setEditor(null);cache.invalidateQueries({queryKey:['aiyi','items']});setNotice('衣物已保存到你的衣橱。');}}/>}</div></Dialog.Content></Dialog.Portal></Dialog.Root>
+    <Dialog.Root open={!!deleting} onOpenChange={value=>{if(!value&&!remove.isPending)setDeleting(null);}}><Dialog.Portal><Dialog.Overlay className={ui.overlay}/><Dialog.Content className={`${ui.sheet} ${ui.smallSheet}`}><div className={ui.sheetHeader}><Dialog.Title>删除这件衣物？</Dialog.Title><Dialog.Close className={ui.roundButton} aria-label="关闭删除确认"><X size={18}/></Dialog.Close></div><div className={ui.sheetBody}><Dialog.Description className={ui.softText}>“{deleting?.name||'未命名衣物'}”及其图片将被移除，此操作无法撤销。</Dialog.Description><div className={ui.confirmActions}><button className={ui.textButton} onClick={()=>setDeleting(null)}>保留衣物</button><button className={ui.blackButton} disabled={remove.isPending} onClick={()=>deleting&&remove.mutate(deleting.id)}>{remove.isPending?'正在删除…':'确认删除'}</button></div></div></Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>;
-}
-
-function Empty({icon: Icon, title, text, action}: {icon: typeof Shirt; title: string; text: string; action?: React.ReactNode}) {
-  return <section className={styles.empty}><div><Icon size={31}/></div><h2>{title}</h2><p>{text}</p>{action}</section>;
-}
-function ErrorPanel({message, retry}: {message: string; retry: () => void}) {
-  return <div role="alert" className={styles.errorPanel}><p>{message}</p><button className={styles.secondary} onClick={retry}><RefreshCw size={15}/>重试</button></div>;
-}
-function ItemForm({item, request, onSaved}: {item: Item | null; request: <T>(path: string, init?: RequestInit) => Promise<T>; onSaved: () => void}) {
-  const [name, setName] = useState(item?.name || '');
-  const [type, setType] = useState(item?.type || 't-shirt');
-  const [color, setColor] = useState(item?.primary_color || '');
-  const [notes, setNotes] = useState(item?.notes || '');
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!file) {setPreview(''); return;}
-    const url = URL.createObjectURL(file); setPreview(url); return () => URL.revokeObjectURL(url);
-  }, [file]);
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setError('');
-    if (!item && !file) {setError('请先选择一张衣物图片。'); return;}
-    setBusy(true);
-    try {
-      if (item) await request(`/items/${item.id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name.trim(), type, primary_color: color || null, colors: color ? [color] : [], notes})});
-      else {
-        const data = new FormData(); data.set('image', file!); data.set('name', name.trim()); data.set('type', type); data.set('skip_ai', 'true'); data.set('notes', notes);
-        if (color) {data.set('colors', color); data.set('primary_color', color);}
-        await request('/items', {method: 'POST', body: data});
-      }
-      onSaved();
-    } catch (err) {setError(failureMessage(err));}
-    finally {setBusy(false);}
-  }
-  return <form onSubmit={submit} className={styles.form}>
-    {!item ? <label className={styles.upload}>{preview ? <img src={preview} alt="待上传衣物预览"/> : <><Upload size={26}/><strong>选择衣物照片</strong><span>JPG、PNG 或 WebP，最大 20 MB</span></>}<input type="file" accept="image/jpeg,image/png,image/webp" aria-label="选择衣物照片" disabled={busy} onChange={event => {
-      const next = event.target.files?.[0];
-      if (!next) return;
-      if (!['image/jpeg','image/png','image/webp'].includes(next.type) || next.size > 20 * 1024 * 1024) {setError('请选择不超过 20 MB 的 JPG、PNG 或 WebP 图片。'); event.target.value = ''; return;}
-      setFile(next); setError('');
-      if (!name) setName(next.name.replace(/\.[^.]+$/, '').slice(0,100));
-    }}/>{preview && <span>点击图片重新选择</span>}</label> : <img className={styles.editPreview} src={item.image_url} alt={item.name || '衣物'}/>}
-    <label className={styles.field}>衣物名称<input required maxLength={100} value={name} disabled={busy} onChange={event => setName(event.target.value)} placeholder="例如：白色纯棉 T 恤"/></label>
-    <div className={styles.fieldRow}><label className={styles.field}>类别<select value={type} disabled={busy} onChange={event => setType(event.target.value)}>{types.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className={styles.field}>主色<select value={color} disabled={busy} onChange={event => setColor(event.target.value)}><option value="">暂不填写</option>{colors.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
-    <label className={styles.field}>备注（选填）<textarea maxLength={1000} value={notes} disabled={busy} onChange={event => setNotes(event.target.value)} placeholder="例如：版型偏宽松，适合周末穿" rows={2}/></label>
-    <p className={styles.small}>此表单为手动入库，图片只保存到本机。如需自动识别，请使用衣橱页的 AI 识别入库。</p>
-    {error && <p className={styles.error} role="alert">{error}</p>}
-    <div className={styles.dialogActions}><Dialog.Close className={styles.secondary} disabled={busy}>取消</Dialog.Close><button className={styles.primary} type="submit" disabled={busy || !name.trim()}><Check size={16}/>{busy ? '正在保存…' : '保存衣物'}</button></div>
-  </form>;
 }

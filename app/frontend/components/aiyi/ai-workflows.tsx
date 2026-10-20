@@ -58,13 +58,13 @@ function CandidateReview({job, request, userKey}: {job: AIJob; request: AIReques
   </div>;
 }
 
-export function FittingPanel({request, userKey, items, itemsLoading, itemsError, retryItems}: {request: AIRequest; userKey: string; items: WardrobeItem[]; itemsLoading: boolean; itemsError?: string; retryItems: () => void}) {
+export function FittingPanel({request, userKey, items, itemsLoading, itemsError, retryItems, initialSelected = [], initialModelId = ''}: {request: AIRequest; userKey: string; items: WardrobeItem[]; itemsLoading: boolean; itemsError?: string; retryItems: () => void; initialSelected?: string[]; initialModelId?: string}) {
   const queryClient = useQueryClient();
   const settings = useAIServices(request, userKey);
   const jobs = useAIJobs(request, userKey, 'try_on');
   const models = useAIJobs(request, userKey, 'model');
   const searchParams = useSearchParams();
-  const requestedModel = searchParams.get('model') || '';
+  const requestedModel = searchParams.get('model') || initialModelId;
   const [sourceMode, setSourceMode] = useState<'upload' | 'model'>(requestedModel ? 'model' : 'upload');
   const [modelId, setModelId] = useState(requestedModel);
   const linkedModel = useQuery({queryKey: ['aiyi', 'selected-model', userKey, requestedModel], queryFn: () => request<AIJob>(`/ai/jobs/${encodeURIComponent(requestedModel)}`), enabled: !!requestedModel, retry: false});
@@ -72,7 +72,7 @@ export function FittingPanel({request, userKey, items, itemsLoading, itemsError,
   const availableModels = Array.from(new Map([...models.jobs, ...(linkedModel.data ? [linkedModel.data] : [])].filter(job => job.kind === 'model' && job.status === 'completed' && job.result?.image_url).map(job => [job.id, job])).values());
   const chosenModel = availableModels.find(job => job.id === modelId);
   const [file, setFile] = useState<File | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(initialSelected);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState('');
   const supported = items.filter(item => tryOnCategory(item.type));
