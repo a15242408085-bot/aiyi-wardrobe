@@ -11,11 +11,11 @@ seed['assets']['hero'] = 'data:image/png;base64,' + base64.b64encode(
     (ROOT / 'site/public/studio/model-outfit-cutout.png').read_bytes()
 ).decode('ascii')
 payload = json.dumps(seed, ensure_ascii=False, separators=(',', ':')).replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e')
-script = (UI / 'app.js').read_text(encoding='utf-8').replace(
+script = (UI / 'app.js').read_text(encoding='utf-8').replace('/*__WARDROBE_EXTENSION__*/', (UI / 'openwardrobe.js').read_text(encoding='utf-8')).replace(
     "'/studio/model-outfit-cutout.png'", "asset('seed:hero')"
 ).replace('</script', '<\\/script')
 document = (UI / 'template.html').read_text(encoding='utf-8').replace(
-    '/*__STYLE__*/', (UI / 'styles.css').read_text(encoding='utf-8')
+    '/*__STYLE__*/', (UI / 'styles.css').read_text(encoding='utf-8') + '\n' + (UI / 'openwardrobe.css').read_text(encoding='utf-8')
 ).replace('__DATA__', payload).replace('/*__SCRIPT__*/', script)
 
 class Audit(HTMLParser):
@@ -32,7 +32,7 @@ class Audit(HTMLParser):
             assert not value or value.startswith(('#', 'data:', 'blob:')), 'External asset: ' + value
 
 Audit().feed(document)
-assert not any(marker in document for marker in ('/*__STYLE__*/', '__DATA__', '/*__SCRIPT__*/'))
+assert not any(marker in document for marker in ('/*__STYLE__*/', '__DATA__', '/*__SCRIPT__*/', '/*__WARDROBE_EXTENSION__*/'))
 assert '/studio/model-outfit-cutout.png' not in script
 output = ROOT / '爱衣橱-暖奶茶网页版.html'
 output.write_text(document, encoding='utf-8')

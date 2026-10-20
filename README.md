@@ -10,7 +10,11 @@
 
 ## 本次交互更新
 
-新增 WOO 风格的造型展示首页、可展开详情、衣物货架、浮动选衣托盘、穿搭日历、全身照指导和浏览器拍摄。现有识别、试穿、单品图和本地 360 接口继续使用。网页实现与示例素材由爱衣橱独立提供，未包含 WOO 反编译代码或人物资源。
+本次根据用户提供的 OpenWardrobe 安装包研究其页面承载方式，并独立实现衣橱分组、三列单品、圆形分类、详情、多选、平铺搭配编辑、真人 Look、穿着日历与统计。原有衣物识别、真人试穿、模特和 360 工作流继续保留。
+
+平铺搭配支持拖动、缩放、旋转、图层、撤销和导出。在线体验版的衣橱、分组、布局和日历保存在当前浏览器，可导出 JSON 备份；本地完整版的衣物和搭配组合使用原有后端，分组与平铺位置保存在当前浏览器。日历中的穿着记录由用户主动安排，不把生成图片的时间当作穿过的日期。
+
+当前没有接入 OpenWardrobe 的账户、社区、内购或 Lola 服务。在线版灵感页使用本机衣橱规则推荐并明确标注。App 专属原生相机、分享和返回行为在浏览器中使用相应网页能力适配；尚未经过原 App 真机逐屏动效对照。公开源码和素材均由爱衣橱独立实现，未包含第三方反编译程序、下载业务脚本或人物资源。
 
 在线版导入的视频可以在当前浏览器恢复；JSON 备份不包含视频。离线 HTML 不连接 AI 服务，新试穿请使用联网部署。
 
@@ -85,7 +89,7 @@ npm run start
 
 ## 修改和重新打包 HTML
 
-界面和交互共用 `site/ui/template.html`、`site/ui/styles.css` 和 `site/ui/app.js`。修改后，在仓库根目录运行：
+界面和交互共用 `site/ui/` 的模板、样式、脚本及 `openwardrobe.css` / `openwardrobe.js` 交互扩展。修改后，在仓库根目录运行：
 
 ```sh
 python3 html/build.py
@@ -98,7 +102,7 @@ python3 html/build.py
 ```sh
 cd app/frontend
 npx tsc --noEmit --incremental false
-npm test -- --run tests/aiyi-ai-workflows.test.tsx tests/aiyi-woo-workflows.test.tsx
+npm test -- --run tests/aiyi-ai-workflows.test.tsx tests/aiyi-woo-workflows.test.tsx tests/aiyi-openwardrobe.test.tsx
 cd ../backend
 .venv/bin/python -m pytest local_tests -q
 ```
@@ -108,6 +112,7 @@ cd ../backend
 ```sh
 cd site
 node --experimental-strip-types --test lib/aiyi/gate.test.ts lib/aiyi/providers.test.ts
+node --test tests/wardrobe-extension.test.mjs
 npx tsc --noEmit --incremental false
 ```
 
@@ -115,4 +120,4 @@ npx tsc --noEmit --incremental false
 
 本项目的本地工作台基于 [Anyesh/wardrowbe](https://github.com/Anyesh/wardrowbe) 的 MIT 许可代码继续开发，原始许可文本保留在 `app/LICENSE`。爱衣橱新增的工作流、中文界面和在线体验版代码按本仓库的 MIT 许可发布。
 
-WOO/REA 只作为产品流程研究参考，公开仓库不包含其反编译代码、资源或私有实现。
+OpenWardrobe / WOO 只作为产品流程研究参考；REA 用于分析用户提供的安装包，公开仓库不包含其反编译代码、资源或私有实现。

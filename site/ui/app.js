@@ -7,7 +7,7 @@
   const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
   const fitsBudget = value => new Blob([JSON.stringify(value)]).size <= MAX_BACKUP_BYTES;
   let state = { version: 1, items: structuredClone(seed.items), models: structuredClone(seed.models), outfits: [], generated: [], lookMeta: {} };
-  let filter = 'all', currentPage = 'looks', studioFilter = 'all';
+  let filter = 'all', currentPage = 'collections', studioFilter = 'all';
   let previewMode = 'example', previewSelectionSignature = null;
   let selected = [], modelId = seed.example.modelId;
   let focusedItemId = seed.items.find(item => item.category === 'outerwear')?.id || seed.items[0]?.id;
@@ -83,7 +83,7 @@
       return {id: r.id, name: text(r.name, 60) || '我的 AI 试穿', createdAt: text(r.createdAt, 40), image: r.image, modelImage: r.modelImage, modelId: text(r.modelId, 100), modelName: text(r.modelName, 60), prompt: text(r.prompt, 600), items: r.items.map(item => ({id: text(item.id, 100), name: text(item.name, 60), category: item.category}))};
     });
     const lookMeta = Object.fromEntries(Object.entries(input.lookMeta || {}).slice(0, 300).filter(([id, meta]) => /^[a-zA-Z0-9_-]{1,110}$/.test(id) && meta && typeof meta === 'object').map(([id, meta]) => [id, {favorite: meta.favorite === true, hidden: meta.hidden === true, date: /^\d{4}-\d{2}-\d{2}$/.test(meta.date || '') ? meta.date : ''}]));
-    return { version: 1, items, models, outfits, generated, lookMeta };
+    return { version: 1, items, models, outfits, generated, lookMeta, ow: owSanitize(input.ow, items) };
   }
   async function openStorage() {
     try {
@@ -142,8 +142,8 @@
     return saveQueue;
   }
   function navigate(page, focus = true) {
-    const titles = { looks: ['我的造型', '让每一套喜欢的穿搭，留下自己的样子。'], wardrobe: ['我的衣橱', '从已经拥有的衣物，搭出新的自己。'], fitting: ['虚拟试穿', '选好人物和单品，看看穿在身上的样子。'], models: ['我的人物', '保存全身参考图，导入转身视频查看更多角度。'], about: ['我的空间', '衣橱、AI 服务和备份，都在这里。'] };
-    if (!Object.hasOwn(titles, page)) page = 'looks';
+    const titles = { collections:['我的衣橱','把喜欢的衣服，整理成自己的小世界。'], outfits:['我的搭配','用已经拥有的单品，组合新的灵感。'], lookbook:['真人穿搭','留住每一套喜欢的上身效果。'], planner:['穿搭日历','提前想好怎么穿，也记住穿过的那一天。'], statistics:['衣橱统计','慢慢了解你的衣橱，也更了解自己。'], inspiration:['搭配灵感','从自己的衣橱，寻找一点新的搭配。'], looks: ['我的造型', '让每一套喜欢的穿搭，留下自己的样子。'], wardrobe: ['我的衣橱', '从已经拥有的衣物，搭出新的自己。'], fitting: ['虚拟试穿', '选好人物和单品，看看穿在身上的样子。'], models: ['我的人物', '保存全身参考图，导入转身视频查看更多角度。'], about: ['我的空间', '衣橱、AI 服务和备份，都在这里。'] };
+    if (!Object.hasOwn(titles, page)) page = 'collections';
     currentPage = page;
     document.body.dataset.page = page;
     document.querySelectorAll('[data-view]').forEach(node => { node.hidden = node.dataset.view !== page; });
@@ -157,54 +157,12 @@
     if (page !== 'fitting') $('studio-rotation-video')?.pause();
     if (page !== 'looks') $('home-video')?.pause();
     if (page === 'looks') renderHome();
+    owRenderPage(page);
     renderTray();
     if (location.hash !== `#${page}`) { try { history.replaceState(null, '', `#${page}`); } catch (_) {} }
     if (focus) { const target = page === 'looks' ? $('home-stage') : page === 'fitting' ? $('main-content') : $('app-title'); target.tabIndex = -1; target.focus({ preventScroll: true }); window.scrollTo({ top: 0 }); }
   }
-  function renderWardrobe() {
-    $('item-count').textContent = state.items.length;
-    $('category-count').textContent = new Set(state.items.map(i => i.category)).size;
-    $('favorite-count').textContent = state.items.filter(i => i.favorite).length;
-    document.querySelectorAll('[data-filter]').forEach(node => { node.setAttribute('aria-pressed', String(node.dataset.filter === filter)); node.classList.toggle('active', node.dataset.filter === filter); });
-    const query = $('search-input').value.trim().toLowerCase();
-    const items = state.items.filter(i => (filter === 'all' || (filter === 'favorites' ? i.favorite : i.category === filter)) && `${i.name} ${i.color} ${i.notes} ${categories[i.category]}`.toLowerCase().includes(query));
-    const grid = $('wardrobe-grid'); grid.replaceChildren();
-    if (wardrobeMode === 'looks') {
-      grid.classList.add('looks-collection');
-      lookRecords().filter(look => !query || look.name.toLowerCase().includes(query)).forEach(look => {
-        const card = button('', () => { activeLookId = look.id; navigate('looks'); }, 'collection-look');
-        card.append(picture(look.displayImage, look.name), el('strong', '', look.name), el('span', '', look.type)); grid.append(card);
-      });
-    } else {
-      grid.classList.remove('looks-collection');
-      Object.entries(categories).forEach(([category, title]) => {
-        const group = items.filter(item => item.category === category); if (!group.length) return;
-        const shelf = el('section', 'wardrobe-shelf');
-        const heading = el('div', 'wardrobe-shelf-heading'); heading.append(el('h2', '', title), el('span', '', `${group.length} 件`));
-        const row = el('div', 'wardrobe-shelf-row');
-        group.forEach(item => {
-          const card = el('article', `item-card wardrobe-piece${selected.includes(item.id) ? ' is-selected' : ''}`);
-          const photo = button('', event => {
-            const origin = event.currentTarget.getBoundingClientRect();
-            const adding = !selected.includes(item.id); selectItem(item.id);
-            if (adding) flyGarment(item, origin);
-          }, 'item-image');
-          photo.setAttribute('aria-label', `${selected.includes(item.id) ? '移除已选' : '选择试穿'}${item.name}`);
-          photo.setAttribute('aria-pressed', String(selected.includes(item.id))); photo.append(picture(item.image, item.name));
-          if (selected.includes(item.id)) photo.append(el('span', 'piece-selected-mark', '✓'));
-          const body = el('div', 'item-body'); body.append(el('h3', '', item.name), el('p', 'item-meta', item.color || title));
-          const actions = el('div', 'card-actions');
-          const favorite = button(item.favorite ? '♥' : '♡', () => { item.favorite = !item.favorite; persist(); renderWardrobe(); renderFitting(); }, 'favorite-button');
-          favorite.setAttribute('aria-pressed', String(item.favorite)); favorite.setAttribute('aria-label', `${item.favorite ? '取消收藏' : '收藏'}${item.name}`);
-          actions.append(favorite, button('详情', () => openItem(item), 'text-button'));
-          body.append(actions); card.append(photo, body); row.append(card);
-        });
-        shelf.append(heading, row); grid.append(shelf);
-      });
-    }
-    $('wardrobe-empty').hidden = grid.childElementCount > 0;
-    renderTray();
-  }
+  function renderWardrobe() { owRenderItems(); }
   function originalOutfit() {
     const currentModel = state.models.find(m => m.id === modelId);
     if (currentModel?.image !== seed.models[0].image || selected.length !== seed.items.length) return false;
@@ -537,7 +495,7 @@
     bindCamera();
     $('woo-create').addEventListener('click',()=>$('woo-create-dialog').showModal());
     $('woo-menu-open').addEventListener('click',()=>$('woo-menu-dialog').showModal());
-    $('woo-calendar-open').addEventListener('click',()=>{renderCalendar();$('woo-calendar-dialog').showModal();});
+    $('woo-calendar-open').addEventListener('click',()=>navigate('planner'));
     $('look-prev').addEventListener('click',()=>changeLook(-1)); $('look-next').addEventListener('click',()=>changeLook(1));
     $('home-details-toggle').addEventListener('click',()=>{if(sheetWasDragged){sheetWasDragged=false;return;}homeExpanded=!homeExpanded;renderHome();});
     $('home-share').addEventListener('click',shareLook);
@@ -581,7 +539,7 @@
     if(globalThis.ResizeObserver){const observer=new ResizeObserver(layoutHomeStage);observer.observe($('home-detail-sheet'));observer.observe($('home-stage'));}
     window.addEventListener('resize',layoutHomeStage);
   }
-  function renderAll() { renderWardrobe(); renderFitting(); renderModels(); renderHome(); renderCalendar(); }
+  function renderAll() { renderWardrobe(); renderFitting(); renderModels(); renderHome(); renderCalendar(); owRenderAll(); }
   function showImage(ref, title) {
     $('image-dialog-title').textContent = title; $('image-dialog-image').src = asset(ref); $('image-dialog-image').alt = title;
     $('image-dialog-download').href = asset(ref); $('image-dialog-download').download = `${title.replace(/[\\/:*?"<>|]/g, '-')}.jpg`;
@@ -656,7 +614,7 @@
   async function importBackup(file) {
     if (!file) return;
     if (file.size > 60 * 1024 * 1024) throw Error('备份文件超过 60 MB，无法导入。');
-    const incoming = sanitize(JSON.parse(await file.text())), next = structuredClone(state), itemMap = new Map(), modelMap = new Map();
+    const incoming = sanitize(JSON.parse(await file.text())), next = structuredClone(state), itemMap = new Map(), modelMap = new Map(), outfitMap = new Map(), lookMap = new Map();
     for (const [rows, target, map] of [[incoming.items, next.items, itemMap], [incoming.models, next.models, modelMap]]) {
       for (const row of rows) {
         const existing = target.find(r => r.id === row.id);
@@ -668,12 +626,16 @@
     }
     incoming.outfits.forEach(outfit => {
       const added = { ...outfit, modelId: modelMap.get(outfit.modelId), itemIds: outfit.itemIds.map(id => itemMap.get(id)) };
-      if (!next.outfits.some(o => o.name === added.name && o.modelId === added.modelId && JSON.stringify(o.itemIds) === JSON.stringify(added.itemIds))) next.outfits.push({ ...added, id: uid() });
+      const existing=next.outfits.find(o => o.name === added.name && o.modelId === added.modelId && JSON.stringify(o.itemIds) === JSON.stringify(added.itemIds));
+      const id=existing?.id||uid();outfitMap.set(outfit.id,id);if(!existing)next.outfits.push({...added,id});
     });
     incoming.generated.forEach(record => {
       const same = next.generated.find(existing => existing.id === record.id);
-      if (!same || JSON.stringify(same) !== JSON.stringify(record)) next.generated.push({...record, id: same ? uid() : record.id});
+      const id=same&&JSON.stringify(same)!==JSON.stringify(record)?uid():record.id;lookMap.set(record.id,id);
+      if (!same || id!==same.id) next.generated.push({...record,id,modelId:modelMap.get(record.modelId)||record.modelId,items:record.items.map(item=>({...item,id:itemMap.get(item.id)||item.id}))});
     });
+    modelMap.forEach((id,previous)=>lookMap.set(`model-${previous}`,`model-${id}`));
+    owMergeBackup(next,incoming,itemMap,outfitMap,lookMap);
     state = sanitize(next);
     if (!modelId) modelId = state.models[0]?.id || '';
     const saved = await persist(); renderAll(); if (saved) toast('备份已合并到当前衣橱。原有衣物已保留。');
@@ -876,7 +838,7 @@
     state = next;
     const saved = await persist();
     $('ai-result-save-note').textContent = saved ? '已将适合浏览的图片和本次提交信息保存到此浏览器，可随备份导出。原始清晰图片请现在下载保留。' : '结果目前只在本页内存中，请下载图片或导出备份，避免关闭页面后丢失。';
-    $('ai-save-result').hidden = saved; renderGeneratedHistory(); activeLookId = record.id; renderHome(); renderCalendar();
+    $('ai-save-result').hidden = saved; renderGeneratedHistory(); activeLookId = record.id; renderHome(); renderCalendar(); owRenderAll();
     return saved;
   }
   async function finishTryOn(result) {
@@ -909,7 +871,7 @@
         if (!confirm(`删除「${record.name}」的本机试穿记录？衣物和人物照片会保留。`)) return;
         state.generated = state.generated.filter(saved => saved.id !== record.id); originalResults.delete(record.id);
         if (currentGenerated?.id === record.id) { currentGenerated = null; previewMode = 'base'; $('ai-result-panel').hidden = true; renderStudioPreview(); }
-        await persist(); renderGeneratedHistory(); renderHome(); renderCalendar();
+        await persist(); renderGeneratedHistory(); renderHome(); renderCalendar(); owRenderAll();
       }, 'text-button'));
       card.append(photo, el('h3', '', record.name), el('p', '', `${record.items.length} 件衣物 · ${record.createdAt ? new Date(record.createdAt).toLocaleDateString('zh-CN') : '已保存'}`), actions); return card;
     }));
@@ -1148,7 +1110,7 @@
     });
     $('item-delete').addEventListener('click', async () => {
       const id = $('item-id').value, item = state.items.find(i => i.id === id); if (!item || !confirm(`删除「${item.name}」？相关搭配中也会移除这件衣物。`)) return;
-      state.items = state.items.filter(i => i.id !== id); selected = selected.filter(i => i !== id);
+      state.items = state.items.filter(i => i.id !== id); state.ow=owSanitize(state.ow,state.items); selected = selected.filter(i => i !== id);
       state.outfits = state.outfits.map(o => ({ ...o, itemIds: o.itemIds.filter(i => i !== id) })).filter(o => o.itemIds.length);
       $('item-dialog').close(); renderAll(); if (await persist()) toast('衣物已删除。');
     });
@@ -1169,7 +1131,7 @@
       const name = text($('outfit-name').value, 60) || `我的搭配 ${state.outfits.length + 1}`;
       const outfit = { id: uid(), name, modelId, itemIds: [...selected], createdAt: new Date().toISOString() };
       if (!fitsBudget({ ...state, outfits: [outfit, ...state.outfits] })) { toast('本地衣橱已满，请先导出并整理。'); return; }
-      state.outfits.unshift(outfit); renderOutfits(); renderHome(); renderCalendar(); if (await persist()) toast(`「${name}」已保存。`);
+      state.outfits.unshift(outfit); renderOutfits(); renderHome(); renderCalendar(); owRenderAll(); if (await persist()) toast(`「${name}」已保存。`);
     });
     $('show-result').addEventListener('click', () => {
       if (!originalOutfit()) return;
@@ -1209,13 +1171,14 @@
     $('studio-preview-example').addEventListener('click', () => { if (originalOutfit()) { previewMode = 'example'; renderStudioPreview(); } });
     $('studio-preview-latest').addEventListener('click', () => { const record = currentGenerated || state.generated[0]; if (record) showGenerated(record); });
     $('studio-preview-open').addEventListener('click', () => { const image = $('fitting-model-image'); if (!image.hidden && image.src) showImage(image.dataset.original || image.src, '原始试穿图片'); });
-    window.addEventListener('hashchange', () => { const page = location.hash.slice(1); if (['looks','fitting','wardrobe','models','about'].includes(page)) navigate(page, false); });
+    window.addEventListener('hashchange', () => { const page = location.hash.slice(1); if (['collections','outfits','lookbook','planner','statistics','inspiration','looks','fitting','wardrobe','models','about'].includes(page)) navigate(page, false); });
   }
+  /*__WARDROBE_EXTENSION__*/
   async function init() {
-    await openStorage();
+    await openStorage(); owInitialize();
     clientId = makeClientId(); try { accessCode = sessionStorage.getItem(AI_CODE_KEY) || ''; } catch (_) {}
     try { const saved=JSON.parse(sessionStorage.getItem('aiyi-current-selection')||'null'); if(Array.isArray(saved?.selected)){const seen=new Set();selected=saved.selected.filter(id=>{const item=state.items.find(i=>i.id===id);if(!item||seen.has(item.category))return false;seen.add(item.category);return true;});}if(state.models.some(model=>model.id===saved?.modelId))modelId=saved.modelId; }catch(_){}
-    await restorePending(); bind(); bindAI(); bindWoo(); renderAll(); await restoreRotation(); navigate(location.hash.slice(1) || 'looks', false); window.appReady = true;
+    await restorePending(); bind(); bindAI(); bindWoo(); owBind(); renderAll(); await restoreRotation(); navigate(location.hash.slice(1) || 'collections', false); window.appReady = true;
     if (accessCode) void checkAI(accessCode, true);
   }
   init().catch(() => { status('页面未能初始化，请重新打开文件'); });
