@@ -2,6 +2,10 @@
 
 爱衣橱是一套面向日常穿搭的衣橱管理与虚拟试穿项目。当前公开版本包含本地完整工作台、可部署的在线版源码，以及无需安装的单文件 HTML 网页。
 
+[打开在线 Demo](https://aiyi-wardrobe-demo.briskthyme.chatgpt.site/) · [MIT 开源许可](LICENSE)
+
+在线 Demo 的衣物识别和真人试穿需要体验码；衣橱整理与搭配画布可以直接体验。
+
 ## 先打开 HTML 体验
 
 下载仓库中的 `爱衣橱-暖奶茶网页版.html`，用 Chrome、Edge 或 Safari 打开即可使用。图片、样式和脚本已内嵌，无需启动服务。
