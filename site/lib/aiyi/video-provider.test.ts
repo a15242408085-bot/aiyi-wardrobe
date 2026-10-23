@@ -4,7 +4,7 @@ import { test, type TestContext } from 'node:test';
 // @ts-ignore TS5097: Native Node tests load the TypeScript source directly.
 import { ProviderError } from './providers.ts';
 // @ts-ignore TS5097: Native Node tests load the TypeScript source directly.
-import { createRotation, downloadRotation, queryRotation, rotationModel, validateRotationInput } from './video-provider.ts';
+import { createRotation, downloadRotation, queryRotation, rotationMetadata, rotationModel, validateRotationInput } from './video-provider.ts';
 
 const env = { AIYI_VIDEO_KEY: 'offline-ark-test-only-key' };
 const image = `data:image/png;base64,${Buffer.from([137,80,78,71,13,10,26,10,1,2,3,4]).toString('base64')}`;
@@ -45,6 +45,25 @@ test('one explicit fallback model and strict configured model validation', () =>
   for (const value of ['', '../models', 'x?key=secret', 'bad name', 'x'.repeat(121)]) assert.throws(() => rotationModel({AIYI_VIDEO_MODEL:value}), errorCode('configuration_error'));
 });
 
+test('public rotation metadata reflects model family without disclosing credentials or endpoint IDs', () => {
+  assert.deepEqual(rotationMetadata(env), {modelLabel:'Seedance 1.0',duration:5,resolution:'720p'});
+  const cases = [
+    ['doubao-seedance-2-0-260128','Seedance 2.0'],
+    ['doubao-seedance-2-0-fast-260128','Seedance 2.0 Fast'],
+    ['doubao-seedance-2-0-mini-260615','Seedance 2.0 Mini'],
+    ['doubao-seedance-1-0-pro-fast-251015','Seedance 1.0 Fast'],
+    ['ep-private-customer-model','视频生成服务'],
+    ['doubao-seedance-2-01-unknown','视频生成服务'],
+    ['invalid endpoint name','视频生成服务'],
+  ];
+  for (const [model,label] of cases) {
+    const metadata=rotationMetadata({...env,AIYI_VIDEO_MODEL:model});
+    assert.deepEqual(metadata,{modelLabel:label,duration:5,resolution:'720p'});
+    assert.ok(!JSON.stringify(metadata).includes(model));
+    assert.ok(!JSON.stringify(metadata).includes(env.AIYI_VIDEO_KEY));
+  }
+});
+
 test('create submits exactly one official image-to-video task with the fixed payload', async (t) => {
   const fetch = mockFetch(t, async request => {
     assert.equal(request.url, 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks');
@@ -53,7 +72,7 @@ test('create submits exactly one official image-to-video task with the fixed pay
     const body=await request.json() as Record<string,unknown>;
     assert.equal(body.model,'doubao-seedance-1-0-pro-250528');
     assert.equal(body.duration,5); assert.equal(body.resolution,'720p'); assert.equal(body.ratio,'9:16');
-    assert.equal(body.camera_fixed,true); assert.equal(body.watermark,false);
+    assert.equal(body.camera_fixed,true); assert.equal(body.watermark,false); assert.equal('generate_audio' in body,false);
     const content=body.content as Array<Record<string,unknown>>;
     assert.equal(content.length,2); assert.equal(content[0].type,'text');
     assert.match(content[0].text as string,/360-degree/); assert.match(content[0].text as string,/camera fully fixed/);
@@ -62,6 +81,23 @@ test('create submits exactly one official image-to-video task with the fixed pay
   });
   assert.deepEqual(await createRotation({image},env),{remoteId:id,model:'doubao-seedance-1-0-pro-250528'});
   assert.equal(fetch.mock.callCount(),1);
+});
+
+test('Seedance 2.0 variants request silent 5-second 720p video without unsupported camera_fixed', async (t) => {
+  const models=['doubao-seedance-2-0-260128','doubao-seedance-2-0-fast-260128','doubao-seedance-2-0-mini-260615'];
+  let index=0;
+  const fetch=mockFetch(t,async request=>{
+    const body=await request.json() as Record<string,unknown>;
+    assert.equal(request.method,'POST'); assert.equal(body.model,models[index++]);
+    assert.equal(body.generate_audio,false); assert.equal('camera_fixed' in body,false);
+    assert.equal(body.duration,5); assert.equal(body.resolution,'720p'); assert.equal(body.ratio,'9:16'); assert.equal(body.watermark,false);
+    const content=body.content as Array<Record<string,unknown>>;
+    assert.match(content[0].text as string,/camera fully fixed/);
+    assert.deepEqual(content[1],{type:'image_url',image_url:{url:image},role:'first_frame'});
+    return Response.json({id});
+  });
+  for(const model of models)assert.deepEqual(await createRotation({image},{...env,AIYI_VIDEO_MODEL:model}),{remoteId:id,model});
+  assert.equal(fetch.mock.callCount(),models.length);
 });
 
 test('invalid input, missing key and already aborted submit never call upstream', async (t) => {
@@ -102,6 +138,48 @@ test('explicit rejection classifications are sanitized and never retried', async
   assert.equal(fetch.mock.callCount(),cases.length);
 });
 
+test('documented rejection codes provide actionable messages without exposing upstream data', async (t) => {
+  const cases: Array<[number,string,string,RegExp]> = [
+    [400,'InputImageSensitiveContentDetected.PrivacyInformation','portrait_required',/人像素材验证/],
+    [400,'InputVideoSensitiveContentDetected.PrivacyInformation','portrait_required',/人像素材验证/],
+    [404,'ModelNotOpen','model_not_open',/尚未开通/],
+    [403,'OperationDenied.ServiceNotOpen','model_not_open',/尚未开通/],
+    [404,'InvalidEndpointOrModel.ModelIDAccessDisabled','endpoint_required',/专属接入点/],
+    [404,'InvalidEndpointOrModel.NotFound','model_unavailable',/模型或接入点不可用/],
+    [400,'InvalidParameter.UnsupportedParameter','unsupported_request',/生成参数/],
+    [400,'InvalidParameter.TaskTypeConstraint','unsupported_request',/生成参数/],
+    [400,'InputImageSensitiveContentDetected.PolicyViolation','content_rejected',/输入素材/],
+    [400,'OutputVideoSensitiveContentDetected','content_rejected',/输出审核/],
+    [403,'AccountOverdueError','provider_limit',/余额或额度/],
+    [401,'AuthenticationError','provider_access',/权限验证/],
+  ];
+  let index=0;
+  const fetch=mockFetch(t,()=>{
+    const [status,code]=cases[index++];
+    return Response.json({error:{code,message:`Bearer ${env.AIYI_VIDEO_KEY} https://secret.invalid/`,param:'private'},account:'private'},{status});
+  });
+  for(const [,,code,message] of cases)await assert.rejects(createRotation({image},{...env,AIYI_VIDEO_MODEL:'doubao-seedance-2-0-260128'}),error=>{errorCode(code)(error);assert.match((error as ProviderError).message,message);return true;});
+  assert.equal(fetch.mock.callCount(),cases.length);
+});
+
+test('unknown, malformed or oversized rejection bodies fall back safely without resubmission', async (t) => {
+  const cases=[
+    ()=>Response.json({error:{code:'Unrecognized.Code',message:env.AIYI_VIDEO_KEY}},{status:400}),
+    ()=>Response.json({error:{code:{value:'ModelNotOpen'},message:env.AIYI_VIDEO_KEY}},{status:400}),
+    ()=>Response.json({error:{code:'ModelNotOpen ',message:env.AIYI_VIDEO_KEY}},{status:400}),
+    ()=>new Response('x'.repeat(131073),{status:400}),
+  ];
+  let index=0;const fetch=mockFetch(t,()=>cases[index++]());
+  for(const _ of cases)await assert.rejects(createRotation({image},env),errorCode('unsupported_request'));
+  assert.equal(fetch.mock.callCount(),cases.length);
+});
+
+test('a server failure remains uncertain even if its body contains a known rejection code',async(t)=>{
+  const fetch=mockFetch(t,()=>Response.json({error:{code:'ModelNotOpen',message:env.AIYI_VIDEO_KEY}},{status:503}));
+  await assert.rejects(createRotation({image},env),errorCode('submission_unknown'));
+  assert.equal(fetch.mock.callCount(),1);
+});
+
 test('queries only GET the original task and normalize official statuses', async (t) => {
   const statuses=['queued','running','succeeded','failed','cancelled','expired'];let index=0;
   const fetch=mockFetch(t,request=>{
@@ -111,6 +189,20 @@ test('queries only GET the original task and normalize official statuses', async
   });
   for(const status of statuses){const result=await queryRotation(id,env);assert.equal(result.status,status==='cancelled'?'failed':status);if(status==='succeeded')assert.equal(result.videoUrl,media);else assert.equal(result.videoUrl,undefined);if(result.message)assert.ok(!result.message.includes(env.AIYI_VIDEO_KEY));}
   assert.equal(fetch.mock.callCount(),statuses.length);
+});
+
+test('asynchronous portrait and output rejection statuses retain safe actionable reasons',async(t)=>{
+  const cases: Array<[string,RegExp]>=[['InputImageSensitiveContentDetected.PrivacyInformation',/人像素材验证/],['OutputVideoSensitiveContentDetected',/输出审核/],['ModelNotOpen',/尚未开通/],['unknown',/服务商任务记录/]];
+  let index=0;
+  const fetch=mockFetch(t,request=>{
+    assert.equal(request.method,'GET');
+    return Response.json({id,status:'failed',error:{code:cases[index++][0],message:`Bearer ${env.AIYI_VIDEO_KEY} https://secret.invalid/`}});
+  });
+  for(const [,message]of cases){
+    const result=await queryRotation(id,env);assert.equal(result.status,'failed');assert.match(result.message||'',message);
+    assert.ok(!result.message?.includes(env.AIYI_VIDEO_KEY));assert.ok(!result.message?.includes('https://'));
+  }
+  assert.equal(fetch.mock.callCount(),cases.length);
 });
 
 test('query rejects invalid task IDs before HTTP', async (t) => {

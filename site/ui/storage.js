@@ -36,6 +36,8 @@
     if (typeof ref !== 'string') return false;
     if (ref.startsWith('seed:')) { const key = ref.slice(5); return isId(key) && Object.hasOwn(seed.assets || {}, key) && image(seed.assets[key], { assets: {} }); }
     if (/^\/video-reference\/[A-Za-z0-9_/-]+\.(?:png|jpe?g|webp)$/i.test(ref) && !ref.includes('..') && !ref.includes('//')) return true;
+    if (/^\/wardrobe-assets\/(?:tops|pants|shoes)\/[A-Za-z0-9_-]+\.png$/.test(ref)) return true;
+    if (/^\/model-assets\/model-0[1-6]\.png$/.test(ref)) return true;
     return ref.length < 4500000 && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(ref);
   }
   function rows(source, limit, label, convert) {

@@ -76,6 +76,21 @@ test('malicious IDs, prototype fields, remote images, svg and traversal are reje
   assert.equal(storage.normalize(raw, seed).items[0].image, raw.items[0].image);
 });
 
+test('catalog items and models survive reload while untrusted asset paths are rejected', async () => {
+  const db = indexedDBFake(empty()), { storage } = load({ indexedDB: db });
+  const store = await storage.create(seed);
+  store.state.items.push({ ...item('asset-tops-01'), image: '/wardrobe-assets/tops/tops-01-oatmeal-henley.png' });
+  store.state.models.push({ ...model('hq-model-01'), image: '/model-assets/model-01.png' });
+  assert.equal(await store.save(), true);
+  const restored = await storage.create(seed);
+  assert.equal(restored.state.items.find(n => n.id === 'asset-tops-01').image, '/wardrobe-assets/tops/tops-01-oatmeal-henley.png');
+  assert.equal(restored.state.models.find(n => n.id === 'hq-model-01').image, '/model-assets/model-01.png');
+  for (const image of ['/wardrobe-assets/tops/../secret.png', '/wardrobe-assets/tops/%2e%2e.png', '/wardrobe-assets/tops/foo.svg', '//wardrobe-assets/tops/foo.png', '/model-assets/model-01.png?redirect=https://example.com', 'https://example.com/model-assets/model-01.png']) {
+    const raw = empty(); raw.items[0].image = image;
+    assert.throws(() => storage.normalize(raw, seed));
+  }
+});
+
 test('limits reject before replacing stored or merged data', async () => {
   const { storage } = load(); const raw = empty(); raw.items = Array.from({ length: 501 }, (_, i) => item(`shirt-${i}`));
   assert.throws(() => storage.normalize(raw, seed), /数量/);

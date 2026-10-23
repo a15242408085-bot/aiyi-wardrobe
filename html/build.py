@@ -18,8 +18,11 @@ MIME_TYPES = {
     '.webp': 'image/webp', '.gif': 'image/gif', '.avif': 'image/avif',
     '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
 }
-MEDIA_REF = re.compile(r'^/(?:video-reference|studio)/[A-Za-z0-9_./-]+$')
-MEDIA_LITERAL = re.compile(r'''(?P<quote>["'])(?P<ref>/(?:video-reference|studio)/[A-Za-z0-9_./-]+)(?P=quote)''')
+MEDIA_FOLDERS = ('video-reference', 'studio', 'model-assets', 'wardrobe-assets')
+MEDIA_PREFIXES = tuple('/' + folder + '/' for folder in MEDIA_FOLDERS)
+MEDIA_DIRECTORY = '(?:' + '|'.join(re.escape(folder) for folder in MEDIA_FOLDERS) + ')'
+MEDIA_REF = re.compile(r'^/' + MEDIA_DIRECTORY + r'/[A-Za-z0-9_./-]+$')
+MEDIA_LITERAL = re.compile(r'''(?P<quote>["'])(?P<ref>/''' + MEDIA_DIRECTORY + r'''/[A-Za-z0-9_./-]+)(?P=quote)''')
 media_cache = {}
 
 
@@ -44,7 +47,7 @@ def inline_seed(value):
         return {key: inline_seed(child) for key, child in value.items()}
     if isinstance(value, list):
         return [inline_seed(child) for child in value]
-    if isinstance(value, str) and value.startswith(('/video-reference/', '/studio/')):
+    if isinstance(value, str) and value.startswith(MEDIA_PREFIXES):
         return inline_media(value)
     return value
 
@@ -57,7 +60,7 @@ def inline_literals(source):
 def inline_css(source):
     source = inline_literals(source)
     return re.sub(
-        r'url\(\s*(/(?:video-reference|studio)/[A-Za-z0-9_./-]+)\s*\)',
+        r'url\(\s*(/' + MEDIA_DIRECTORY + r'/[A-Za-z0-9_./-]+)\s*\)',
         lambda match: 'url("' + inline_media(match[1]) + '")', source,
     )
 

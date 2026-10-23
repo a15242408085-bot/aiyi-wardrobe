@@ -1,0 +1,606 @@
+{
+  "generator": "Built-in image_gen",
+  "count": 30,
+  "assets": [
+    {
+      "id": "tops-01",
+      "category": "tops",
+      "name": "燕麦灰亨利领针织衫",
+      "file": "tops/tops-01-oatmeal-henley.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.3343,
+      "visible_bounds_alpha32": [
+        35,
+        73,
+        1217,
+        1169
+      ],
+      "bytes": 3077438,
+      "sha256": "d010b17dff2aedac9ae1a46cbb3e6822ecd0f5ca902b0256d0fbfc6c3463c3e6"
+    },
+    {
+      "id": "tops-02",
+      "category": "tops",
+      "name": "奶白V领开衫",
+      "file": "tops/tops-02-ivory-cardigan.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.5074,
+      "visible_bounds_alpha32": [
+        92,
+        114,
+        1162,
+        1145
+      ],
+      "bytes": 1760900,
+      "sha256": "551ae28b5ff4aba9f874bf992228bb1ca0c33ea2733f65d7ca27b492b0d83aa2"
+    },
+    {
+      "id": "tops-03",
+      "category": "tops",
+      "name": "可可棕麻花毛衣",
+      "file": "tops/tops-03-cocoa-cable-knit.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.4128,
+      "visible_bounds_alpha32": [
+        58,
+        80,
+        1197,
+        1182
+      ],
+      "bytes": 2141302,
+      "sha256": "5ef79d3ffa443e4a69f65ea669d0cfe5ace0f32a253d0f96f827690abe98ad59"
+    },
+    {
+      "id": "tops-04",
+      "category": "tops",
+      "name": "驼色翻领针织衫",
+      "file": "tops/tops-04-camel-knit-polo.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.4586,
+      "visible_bounds_alpha32": [
+        113,
+        71,
+        1142,
+        1177
+      ],
+      "bytes": 2443402,
+      "sha256": "58a168f603e55e59f672dfcbcb74c6286783f6e1cc90938254f7d028063b6785"
+    },
+    {
+      "id": "tops-05",
+      "category": "tops",
+      "name": "雾粉圆领毛衣",
+      "file": "tops/tops-05-dusty-rose-pullover.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.4221,
+      "visible_bounds_alpha32": [
+        50,
+        90,
+        1202,
+        1157
+      ],
+      "bytes": 2356969,
+      "sha256": "df9548e101758bdf48636b199863bb5c49ca321fba6cc61d9ab59c7c39d92aae"
+    },
+    {
+      "id": "tops-06",
+      "category": "tops",
+      "name": "白色牛津纺衬衫",
+      "file": "tops/tops-06-white-cotton-shirt.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.4326,
+      "visible_bounds_alpha32": [
+        61,
+        72,
+        1188,
+        1185
+      ],
+      "bytes": 1442494,
+      "sha256": "928f216a13523ed0118c33aa9e8b0a912e0960c2409e5f5c56c523a1f0a48d4c"
+    },
+    {
+      "id": "tops-07",
+      "category": "tops",
+      "name": "黑色方领打底衫",
+      "file": "tops/tops-07-black-ribbed-top.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.5154,
+      "visible_bounds_alpha32": [
+        88,
+        95,
+        1166,
+        1188
+      ],
+      "bytes": 1446248,
+      "sha256": "f1a9d49f77f30ff728e1408a01e61291f97030759111b3bbb39719a6734ae24e"
+    },
+    {
+      "id": "tops-08",
+      "category": "tops",
+      "name": "浅蓝牛仔衬衫",
+      "file": "tops/tops-08-light-blue-denim-shirt.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.4448,
+      "visible_bounds_alpha32": [
+        71,
+        89,
+        1183,
+        1162
+      ],
+      "bytes": 2276174,
+      "sha256": "aff7b2539261966f73cd6662e0ccd28fe47407b89b60dc1d186131a3ca437b38"
+    },
+    {
+      "id": "tops-09",
+      "category": "tops",
+      "name": "奶白棕条纹毛衣",
+      "file": "tops/tops-09-oatmeal-brown-stripe-knit.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.3947,
+      "visible_bounds_alpha32": [
+        23,
+        64,
+        1232,
+        1189
+      ],
+      "bytes": 2298426,
+      "sha256": "afec4db517c0b4772284cbbf7b470c9444efaf32ae314c40817c17bb974fe133"
+    },
+    {
+      "id": "tops-10",
+      "category": "tops",
+      "name": "焦糖色拉链卫衣",
+      "file": "tops/tops-10-caramel-zip-hoodie.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.425,
+      "visible_bounds_alpha32": [
+        65,
+        46,
+        1190,
+        1191
+      ],
+      "bytes": 1948133,
+      "sha256": "ff6f67613e6dfb7b2e041e9e6144e0a96232b8c27b8f1bef412a6a60cd74693c"
+    },
+    {
+      "id": "pants-01",
+      "category": "pants",
+      "name": "中蓝直筒牛仔裤",
+      "file": "pants/pants-01-medium-blue-straight-jeans.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.7186,
+      "visible_bounds_alpha32": [
+        413,
+        50,
+        840,
+        1203
+      ],
+      "bytes": 1186678,
+      "sha256": "dd2954dd1d4684c4c4d69f640f48615327003a83d7e487fd60a53877768642b4"
+    },
+    {
+      "id": "pants-02",
+      "category": "pants",
+      "name": "象牙白阔腿西裤",
+      "file": "pants/pants-02-ivory-wide-leg-pleated-trousers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6681,
+      "visible_bounds_alpha32": [
+        332,
+        35,
+        922,
+        1217
+      ],
+      "bytes": 838199,
+      "sha256": "9cac25addf1d370f7e708bbc79297ad983afd94942468f88af5d7b00a372dc0c"
+    },
+    {
+      "id": "pants-03",
+      "category": "pants",
+      "name": "可可棕灯芯绒裤",
+      "file": "pants/pants-03-cocoa-corduroy-straight-pants.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6539,
+      "visible_bounds_alpha32": [
+        343,
+        39,
+        915,
+        1207
+      ],
+      "bytes": 1137336,
+      "sha256": "8ccd81c1d5e07967b9091990889164053bc346cd28a4b9f77a5a556a6e89699f"
+    },
+    {
+      "id": "pants-04",
+      "category": "pants",
+      "name": "驼色直筒西裤",
+      "file": "pants/pants-04-camel-tailored-straight-trousers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6956,
+      "visible_bounds_alpha32": [
+        379,
+        50,
+        875,
+        1202
+      ],
+      "bytes": 906564,
+      "sha256": "f180d482f2ac1ff6a569ac1d567d26c3eeb4a2be1dc977f968e5a66ffd9ee561"
+    },
+    {
+      "id": "pants-05",
+      "category": "pants",
+      "name": "炭灰阔腿西裤",
+      "file": "pants/pants-05-charcoal-wide-leg-suit-trousers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6538,
+      "visible_bounds_alpha32": [
+        307,
+        37,
+        947,
+        1217
+      ],
+      "bytes": 1200337,
+      "sha256": "d5ff86e713c38bd4e90bf167734c8e9fda35effc3a60bb7d756639081f8696e2"
+    },
+    {
+      "id": "pants-06",
+      "category": "pants",
+      "name": "黑色锥形九分裤",
+      "file": "pants/pants-06-black-tapered-ankle-trousers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.7192,
+      "visible_bounds_alpha32": [
+        385,
+        64,
+        875,
+        1191
+      ],
+      "bytes": 722084,
+      "sha256": "2f1c125f0487ad1412211040af867005701cb5a0b91447516a5d102fce0598e3"
+    },
+    {
+      "id": "pants-07",
+      "category": "pants",
+      "name": "浅蓝宽松牛仔裤",
+      "file": "pants/pants-07-light-blue-loose-jeans.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6205,
+      "visible_bounds_alpha32": [
+        300,
+        43,
+        954,
+        1202
+      ],
+      "bytes": 1577646,
+      "sha256": "a5d9dd45a1a8c7846cbf80cd9ad194c2fc085739ce85045d376e6b1205e0de3b"
+    },
+    {
+      "id": "pants-08",
+      "category": "pants",
+      "name": "燕麦色亚麻裤",
+      "file": "pants/pants-08-oatmeal-linen-relaxed-pants.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6137,
+      "visible_bounds_alpha32": [
+        286,
+        36,
+        968,
+        1220
+      ],
+      "bytes": 1401190,
+      "sha256": "96f425a2cfaaf2f5b49546783f091c8ec215bca79290a2948b53130b0b1837f6"
+    },
+    {
+      "id": "pants-09",
+      "category": "pants",
+      "name": "深蓝直筒牛仔裤",
+      "file": "pants/pants-09-navy-straight-jeans.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.684,
+      "visible_bounds_alpha32": [
+        373,
+        51,
+        881,
+        1204
+      ],
+      "bytes": 1212627,
+      "sha256": "b6627c0ff014b67266b525766ba9dcf9dc1e1af5081805132b8ec26e1e15daac"
+    },
+    {
+      "id": "pants-10",
+      "category": "pants",
+      "name": "浅灰褐针织家居裤",
+      "file": "pants/pants-10-pale-taupe-knit-lounge-pants.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6395,
+      "visible_bounds_alpha32": [
+        314,
+        46,
+        942,
+        1213
+      ],
+      "bytes": 1519168,
+      "sha256": "e303c52d24ca5a33d4f15ad8b282649053631d43913ed98185c09625ed1bfd2a"
+    },
+    {
+      "id": "shoes-01",
+      "category": "shoes",
+      "name": "奶白皮革运动鞋",
+      "file": "shoes/shoes-01-ivory-leather-sneakers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.559,
+      "visible_bounds_alpha32": [
+        40,
+        189,
+        1231,
+        1105
+      ],
+      "bytes": 1375474,
+      "sha256": "818d23506705d2f061d555dc732acfd89cf831dc6614a14f9e281cad69fe1d30"
+    },
+    {
+      "id": "shoes-02",
+      "category": "shoes",
+      "name": "巧克力麂皮乐福鞋",
+      "file": "shoes/shoes-02-chocolate-suede-loafers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6093,
+      "visible_bounds_alpha32": [
+        38,
+        231,
+        1230,
+        1069
+      ],
+      "bytes": 1441284,
+      "sha256": "2067919b9ef7aff47cfe97af8e1deaf4ce7ea9815f97baf35b285e1fb51ce159"
+    },
+    {
+      "id": "shoes-03",
+      "category": "shoes",
+      "name": "黑色玛丽珍平底鞋",
+      "file": "shoes/shoes-03-black-mary-jane-flats.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.622,
+      "visible_bounds_alpha32": [
+        60,
+        226,
+        1222,
+        1083
+      ],
+      "bytes": 1319552,
+      "sha256": "6be167756c9e5e07d2a5ec1a618b5f487f5e93eab50e9a42c1c876ec18f4ca63"
+    },
+    {
+      "id": "shoes-04",
+      "category": "shoes",
+      "name": "米色麂皮切尔西靴",
+      "file": "shoes/shoes-04-beige-suede-chelsea-boots.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.5693,
+      "visible_bounds_alpha32": [
+        50,
+        165,
+        1215,
+        1107
+      ],
+      "bytes": 1770981,
+      "sha256": "a73e8f3b1cc64d76463e0a506640bb5b67ed57ab91ff982273d4e735ed87ae27"
+    },
+    {
+      "id": "shoes-05",
+      "category": "shoes",
+      "name": "酒红芭蕾平底鞋",
+      "file": "shoes/shoes-05-burgundy-ballet-flats.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6313,
+      "visible_bounds_alpha32": [
+        47,
+        227,
+        1230,
+        1054
+      ],
+      "bytes": 1249923,
+      "sha256": "a2dd60066ec49c3e18be4598f6bb93ac7915a3822f2d4c29440d347639148ae5"
+    },
+    {
+      "id": "shoes-06",
+      "category": "shoes",
+      "name": "浅灰网面跑鞋",
+      "file": "shoes/shoes-06-light-gray-mesh-running-sneakers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.5897,
+      "visible_bounds_alpha32": [
+        29,
+        209,
+        1225,
+        1074
+      ],
+      "bytes": 1754882,
+      "sha256": "571914570f2d564ad483c702e1448100be370a68dcff08cf03d55e656cacf4d4"
+    },
+    {
+      "id": "shoes-07",
+      "category": "shoes",
+      "name": "干邑棕低跟短靴",
+      "file": "shoes/shoes-07-cognac-leather-ankle-boots.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6254,
+      "visible_bounds_alpha32": [
+        101,
+        170,
+        1155,
+        1066
+      ],
+      "bytes": 1422019,
+      "sha256": "3eac00fcd078dd600f76e0693f86fa81a2f007ed667d477b55a760050983d867"
+    },
+    {
+      "id": "shoes-08",
+      "category": "shoes",
+      "name": "奶白细带平底凉鞋",
+      "file": "shoes/shoes-08-cream-leather-flat-sandals.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.6588,
+      "visible_bounds_alpha32": [
+        63,
+        168,
+        1236,
+        1108
+      ],
+      "bytes": 1021313,
+      "sha256": "091534872c604377412e366b3cc511168a3a66f2df0987ee716dfb31cf1adb84"
+    },
+    {
+      "id": "shoes-09",
+      "category": "shoes",
+      "name": "黑色便士乐福鞋",
+      "file": "shoes/shoes-09-black-leather-penny-loafers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.5695,
+      "visible_bounds_alpha32": [
+        24,
+        200,
+        1231,
+        1103
+      ],
+      "bytes": 1545975,
+      "sha256": "840ff78c3b292ade8064987526fb0547283defee291a27aa6b3b717154ef7e43"
+    },
+    {
+      "id": "shoes-10",
+      "category": "shoes",
+      "name": "米白帆布鞋",
+      "file": "shoes/shoes-10-offwhite-canvas-sneakers.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "mode": "RGBA",
+      "transparent": true,
+      "transparent_pixel_ratio": 0.5304,
+      "visible_bounds_alpha32": [
+        30,
+        161,
+        1233,
+        1130
+      ],
+      "bytes": 1718787,
+      "sha256": "2ca6bd082371742222727d0892f4188f235fd63d3c055e19aea022952986d890"
+    }
+  ]
+}

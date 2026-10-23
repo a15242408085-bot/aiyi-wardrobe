@@ -5,8 +5,11 @@ import { ProviderError, validateRecognitionInput } from './providers.ts';
 export type RotationEnv = { AIYI_VIDEO_KEY?: string; AIYI_VIDEO_MODEL?: string };
 export type RotationInput = { image: string };
 export type RotationStatus = { status: 'queued' | 'running' | 'succeeded' | 'failed' | 'expired'; videoUrl?: string; message?: string };
+export type RotationMetadata = { modelLabel: string; duration: number; resolution: string };
 const BASE = 'https://ark.cn-beijing.volces.com/api/v3';
 const DEFAULT_MODEL = 'doubao-seedance-1-0-pro-250528';
+const DURATION = 5;
+const RESOLUTION = '720p';
 const MAX_JSON = 128 * 1024;
 const MAX_VIDEO = 32 * 1024 * 1024;
 const TASK_ID = /^[A-Za-z0-9_-]{1,160}$/;
@@ -26,6 +29,20 @@ export function rotationModel(env: RotationEnv): string {
   const value = env.AIYI_VIDEO_MODEL ?? DEFAULT_MODEL;
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value)) throw new ProviderError('configuration_error', '转身视频模型设置不正确，请联系网站管理员。');
   return value;
+}
+function seedance2(model: string): boolean { return /^doubao-seedance-2-0(?:-|$)/.test(model); }
+export function rotationMetadata(env: RotationEnv): RotationMetadata {
+  const model = env.AIYI_VIDEO_MODEL ?? DEFAULT_MODEL;
+  let modelLabel = '视频生成服务';
+  if (typeof model === 'string') {
+    if (/^doubao-seedance-2-0-fast(?:-|$)/.test(model)) modelLabel = 'Seedance 2.0 Fast';
+    else if (/^doubao-seedance-2-0-mini(?:-|$)/.test(model)) modelLabel = 'Seedance 2.0 Mini';
+    else if (seedance2(model)) modelLabel = 'Seedance 2.0';
+    else if (/^doubao-seedance-1-0-pro-fast(?:-|$)/.test(model)) modelLabel = 'Seedance 1.0 Fast';
+    else if (/^doubao-seedance-1-0-pro(?:-|$)/.test(model)) modelLabel = 'Seedance 1.0';
+  }
+  // Expose presentation metadata only, never a key or a private endpoint ID.
+  return { modelLabel, duration: DURATION, resolution: RESOLUTION };
 }
 export function validateRotationInput(body: unknown): RotationInput { return validateRecognitionInput(body); }
 function taskId(value: unknown): string {
@@ -47,6 +64,38 @@ function httpError(status: number): ProviderError {
   if (status === 402 || status === 429) return new ProviderError('provider_limit', '视频服务额度不足或当前繁忙，请稍后再试。');
   if (status === 400 || status === 404 || status === 422) return new ProviderError('unsupported_request', '视频服务未接受此请求，请联系网站管理员检查模型和参数。');
   return new ProviderError('provider_error', '视频服务暂时不可用，请稍后查询同一任务。');
+}
+function knownProviderError(value: unknown): ProviderError | undefined {
+  if (!object(value) || typeof value.code !== 'string') return undefined;
+  const code = value.code;
+  // Match documented codes only. Upstream messages may contain credentials or private URLs.
+  if (code === 'InputImageSensitiveContentDetected.PrivacyInformation' || code === 'InputVideoSensitiveContentDetected.PrivacyInformation') {
+    return new ProviderError('portrait_required', '当前图片未通过视频平台的人像素材验证。请使用平台可信虚拟人像或已完成授权的人像素材。');
+  }
+  if (code === 'ModelNotOpen' || code === 'OperationDenied.ServiceNotOpen') {
+    return new ProviderError('model_not_open', '当前账号尚未开通所选视频模型，请在火山方舟控制台开通后再生成。');
+  }
+  if (code === 'InvalidEndpointOrModel.ModelIDAccessDisabled') {
+    return new ProviderError('endpoint_required', '当前账号需要使用专属接入点，请联系网站管理员配置有权限的接入点。');
+  }
+  if (code === 'InvalidEndpointOrModel.NotFound' || code === 'InvalidEndpoint.ClosedEndpoint') {
+    return new ProviderError('model_unavailable', '视频模型或接入点不可用，请联系网站管理员检查模型设置和访问权限。');
+  }
+  if (['InvalidParameter.UnsupportedParameter', 'InvalidParameter.TaskTypeConstraint', 'InvalidParameter.TaskTypeMismatch', 'InvalidParameter', 'MissingParameter'].includes(code)) {
+    return new ProviderError('unsupported_request', '当前视频模型不支持这组生成参数，请联系网站管理员检查设置。');
+  }
+  if (['InputImageSensitiveContentDetected', 'InputVideoSensitiveContentDetected', 'InputTextSensitiveContentDetected', 'InputImageSensitiveContentDetected.PolicyViolation', 'InputVideoSensitiveContentDetected.PolicyViolation', 'InputTextSensitiveContentDetected.PolicyViolation'].includes(code)) {
+    return new ProviderError('content_rejected', '视频平台未接受这次输入素材，请检查图片及使用权限后再生成。');
+  }
+  if (code === 'OutputVideoSensitiveContentDetected' || code === 'OutputVideoSensitiveContentDetected.PolicyViolation') {
+    return new ProviderError('content_rejected', '本次视频未通过平台的输出审核，未获得可用的视频结果。');
+  }
+  if (['AccountOverdueError', 'OperationDenied.ServiceOverdue', 'AccountQuotaExceeded', 'QuotaExceeded', 'SetLimitExceeded'].includes(code)) {
+    return new ProviderError('provider_limit', '视频服务余额或额度不足，请联系网站管理员检查账户。');
+  }
+  if (code === 'AuthenticationError' || code === 'AccessDenied') {
+    return new ProviderError('provider_access', '视频服务权限验证未通过，请联系网站管理员。');
+  }
 }
 async function readJson(response: Response): Promise<unknown> {
   const declared = Number(response.headers.get('content-length'));
@@ -79,7 +128,12 @@ async function request(path: string, env: RotationEnv, payload: unknown | undefi
       ...(paid ? { body: JSON.stringify(payload) } : {}), redirect: 'manual', credentials: 'omit', cache: 'no-store', signal: controller.signal });
     if (!response.ok) {
       definitelyRejected = response.status >= 400 && response.status < 500;
-      await response.body?.cancel();
+      if (definitelyRejected) {
+        let detail: unknown;
+        try { detail = await readJson(response); } catch { /* Fall back to the HTTP class, without exposing the response. */ }
+        const known = object(detail) ? knownProviderError(detail.error) : undefined;
+        if (known) throw known;
+      } else await response.body?.cancel();
       throw httpError(response.status);
     }
     return await readJson(response);
@@ -94,7 +148,8 @@ export async function createRotation(input: RotationInput, env: RotationEnv, sig
   const validated = validateRotationInput(input), model = rotationModel(env);
   const output = await request('/contents/generations/tasks', env, {
     model, content: [{ type: 'text', text: PROMPT }, { type: 'image_url', image_url: { url: validated.image }, role: 'first_frame' }],
-    resolution: '720p', ratio: '9:16', duration: 5, camera_fixed: true, watermark: false,
+    resolution: RESOLUTION, ratio: '9:16', duration: DURATION, watermark: false,
+    ...(seedance2(model) ? { generate_audio: false } : { camera_fixed: true }),
   }, signal);
   if (!object(output) || typeof output.id !== 'string' || !TASK_ID.test(output.id)) throw new ProviderError('submission_unknown', UNKNOWN);
   return { remoteId: output.id, model };
@@ -107,7 +162,7 @@ export async function queryRotation(remoteId: string, env: RotationEnv, signal?:
     if (!object(output.content)) invalidResponse();
     return { status: 'succeeded', videoUrl: mediaUrl(output.content.video_url) };
   }
-  if (output.status === 'failed' || output.status === 'cancelled') return { status: 'failed', message: '视频服务未能完成这次生成，请先核对服务商任务记录。' };
+  if (output.status === 'failed' || output.status === 'cancelled') return { status: 'failed', message: knownProviderError(output.error)?.message || '视频服务未能完成这次生成，请先核对服务商任务记录。' };
   if (output.status === 'expired') return { status: 'expired', message: '这条视频任务已过期，请查看之前保存的结果。' };
   invalidResponse();
 }

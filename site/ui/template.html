@@ -53,11 +53,12 @@
       <section id="home-view" class="screen active" data-screen="home" aria-label="我的穿搭">
         <div id="model-stage" class="model-stage">
           <div id="season-word" aria-hidden="true">SUMMER</div>
-          <img id="look-poster" alt="当前穿搭全身效果">
+          <img id="look-poster" alt="当前穿搭全身效果" loading="eager" decoding="async" fetchpriority="high">
           <video id="look-video" playsinline muted loop preload="metadata" hidden></video>
           <button id="look-prev" class="icon-button look-arrow" type="button" aria-label="上一套穿搭"><svg class="icon"><use href="#icon-left"/></svg></button>
           <button id="look-next" class="icon-button look-arrow" type="button" aria-label="下一套穿搭"><svg class="icon"><use href="#icon-right"/></svg></button>
-          <span id="rotation-hint" hidden>Drag to rotate</span>
+          <span id="rotation-hint" hidden></span>
+          <button id="change-home-model" class="model-picker" type="button"><svg class="icon"><use href="#icon-person"/></svg><span>更换模特</span></button>
           <button id="play-look" class="icon-button" type="button" aria-label="播放或暂停转身" hidden><svg class="icon"><use href="#icon-play"/></svg></button>
         </div>
         <section id="look-sheet" aria-label="当前穿搭详情">
@@ -72,7 +73,8 @@
         </section>
       </section>
       <section id="wardrobe-view" class="screen" data-screen="wardrobe" aria-label="我的衣橱">
-        <header id="wardrobe-toolbar"><h1>My wardrobe</h1><div><label class="wardrobe-search-label"><svg class="icon"><use href="#icon-search"/></svg><input id="wardrobe-search" type="search" placeholder="Search pieces" aria-label="搜索衣物"></label><button id="wardrobe-add" class="icon-button" type="button" aria-label="添加衣物"><svg class="icon"><use href="#icon-plus"/></svg></button></div></header>
+        <header id="wardrobe-toolbar"><h1 id="wardrobe-title">精选素材</h1><div><label class="wardrobe-search-label"><svg class="icon"><use href="#icon-search"/></svg><input id="wardrobe-search" type="search" placeholder="搜索名称、颜色" aria-label="搜索衣物"></label><button id="wardrobe-add" class="icon-button" type="button" aria-label="添加衣物"><svg class="icon"><use href="#icon-plus"/></svg></button></div></header>
+        <div class="wardrobe-tabs" role="group" aria-label="衣橱来源"><button id="catalog-tab" class="active" type="button" aria-pressed="true">精选素材</button><button id="personal-tab" type="button" aria-pressed="false">我的衣橱</button></div>
         <div id="wardrobe-shelves"></div>
       </section>
       <section id="choose-view" class="screen" data-screen="choose" aria-label="选择试穿人物">

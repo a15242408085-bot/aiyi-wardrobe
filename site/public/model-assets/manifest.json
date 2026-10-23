@@ -1,0 +1,184 @@
+{
+  "generatedAt": "2026-10-24",
+  "generator": "built-in image_gen",
+  "format": "PNG",
+  "originalPixelsPreserved": true,
+  "use": "Fictional adult Chinese female fashion model assets for Aiyi Wardrobe web demo",
+  "assets": [
+    {
+      "id": "model-01",
+      "name": "燕麦针织 · 蓝色直筒牛仔",
+      "file": "model-01.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "bytes": 1700146,
+      "sha256": "250a13e1df794d51b25dc88b28fe83e9c523662d9aba90af7cbc99e2694c2875",
+      "alphaExtrema": [
+        0,
+        254
+      ],
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "transparentPercent": 72.91,
+      "alpha32SubjectBounds": [
+        302,
+        12,
+        736,
+        1501
+      ],
+      "visualReview": "Passed individual view_image inspection: full head, both hands and both shoes visible; front-facing relaxed standing pose; garment texture and facial features clear; no text or branding."
+    },
+    {
+      "id": "model-02",
+      "name": "白衬衫 · 驼色直筒裤",
+      "file": "model-02.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "bytes": 1455838,
+      "sha256": "743e2e86bd50a1086ed2637d29b6254e7dea231970b31d2c8376ef6879957a0e",
+      "alphaExtrema": [
+        0,
+        254
+      ],
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "transparentPercent": 72.9,
+      "alpha32SubjectBounds": [
+        289,
+        14,
+        766,
+        1499
+      ],
+      "visualReview": "Passed individual view_image inspection: full head, both hands and both shoes visible; front-facing relaxed standing pose; garment texture and facial features clear; no text or branding."
+    },
+    {
+      "id": "model-03",
+      "name": "豆沙粉针织 · 象牙白阔腿裤",
+      "file": "model-03.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "bytes": 1525492,
+      "sha256": "255d824c8dc771ec337ce81c9cba9cbc4d36869ca0c3c69c78832a9855a72752",
+      "alphaExtrema": [
+        0,
+        254
+      ],
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "transparentPercent": 66.81,
+      "alpha32SubjectBounds": [
+        271,
+        25,
+        802,
+        1488
+      ],
+      "visualReview": "Passed individual view_image inspection: full head, both hands and both shoes visible; front-facing relaxed standing pose; garment texture and facial features clear; no text or branding."
+    },
+    {
+      "id": "model-04",
+      "name": "黑色罗纹上衣 · 炭灰阔腿裤",
+      "file": "model-04.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "bytes": 1512537,
+      "sha256": "bcb7ea4d6754f05d374b2789858f36f46a4241171050c9ec63b4312396a97a27",
+      "alphaExtrema": [
+        0,
+        254
+      ],
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "transparentPercent": 70.29,
+      "alpha32SubjectBounds": [
+        237,
+        17,
+        745,
+        1503
+      ],
+      "visualReview": "Passed individual view_image inspection: full head, both hands and both shoes visible; front-facing relaxed standing pose; garment texture and facial features clear; no text or branding."
+    },
+    {
+      "id": "model-05",
+      "name": "驼色针织 Polo · 藏蓝牛仔裤",
+      "file": "model-05.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "bytes": 1584638,
+      "sha256": "7648dfaa91b326ab5c275468413ad19564e2c96d4d2dbb7ed03811ab04e9c359",
+      "alphaExtrema": [
+        0,
+        254
+      ],
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "transparentPercent": 74.04,
+      "alpha32SubjectBounds": [
+        291,
+        17,
+        726,
+        1504
+      ],
+      "visualReview": "Passed individual view_image inspection: full head, both hands and both shoes visible; front-facing relaxed standing pose; garment texture and facial features clear; no text or branding."
+    },
+    {
+      "id": "model-06",
+      "name": "奶油开衫 · 燕麦亚麻裤",
+      "file": "model-06.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "bytes": 1775409,
+      "sha256": "c1903fd77c16babb387f62a11693a0dc90382b0354b3d5abfe9ca99e54fd30fe",
+      "alphaExtrema": [
+        0,
+        254
+      ],
+      "cornerAlpha": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "transparentPercent": 66.66,
+      "alpha32SubjectBounds": [
+        260,
+        19,
+        776,
+        1514
+      ],
+      "visualReview": "Passed individual view_image inspection: full head, both hands and both shoes visible; front-facing relaxed standing pose; garment texture and facial features clear; no text or branding."
+    }
+  ],
+  "qualityNotes": [
+    "Native original 1024×1536 RGBA PNG pixels preserved without resizing, sharpening, retouching or alpha postprocessing.",
+    "All six images use real alpha with transparent exterior pixels. Native maximum alpha is 254; model-06 has alpha=1 at one corner.",
+    "The generated headroom is narrower than the requested 5–7%, but every full head and both shoes remain within the frame. Render with object-fit:contain to avoid cropping.",
+    "These are newly generated fictional adult models, not photos of identifiable real people.",
+    "Six independent images are not a multiview reconstruction of a single person."
+  ]
+}

@@ -3,7 +3,7 @@ import { assertUploadAvailable, authorize, checkOrigin, cleanup, digest, failJob
 import { recognize, tryOn, validateRecognitionInput, validateTryOnInput, ProviderError } from '../../../../lib/aiyi/providers';
 
 import { createVideoJob, readVideoJob, readVideoMedia } from '../../../../lib/aiyi/video-jobs';
-import { validateRotationInput } from '../../../../lib/aiyi/video-provider';
+import { rotationMetadata, validateRotationInput } from '../../../../lib/aiyi/video-provider';
 
 const env = () => runtimeEnv as unknown as Bindings;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Vary': 'X-Aiyi-Code', 'Referrer-Policy': 'no-referrer' };
@@ -46,10 +46,10 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url), bindings = env(); checkOrigin(request);
     const configured = !!(bindings.DB && bindings.BUCKET && bindings.AIYI_ACCESS_CODE && bindings.AIYI_RECOGNITION_KEY && bindings.AIYI_IMAGE_KEY);
-    if (url.pathname.endsWith('/status') && !request.headers.get('x-aiyi-code')) return json({ authorized: false, configured, rotationConfigured: !!bindings.AIYI_VIDEO_KEY });
+    if (url.pathname.endsWith('/status') && !request.headers.get('x-aiyi-code')) return json({ authorized: false, configured, rotationConfigured: !!bindings.AIYI_VIDEO_KEY, rotation: rotationMetadata(bindings) });
     const owner = await authorize(request, bindings, url.searchParams.get('clientId'));
     await cleanup(bindings);
-    if (url.pathname.endsWith('/status')) return json({ authorized: true, configured, rotationConfigured: !!bindings.AIYI_VIDEO_KEY, ...await quota(bindings.DB, owner) });
+    if (url.pathname.endsWith('/status')) return json({ authorized: true, configured, rotationConfigured: !!bindings.AIYI_VIDEO_KEY, rotation: rotationMetadata(bindings), ...await quota(bindings.DB, owner) });
     const videoMatch = url.pathname.match(/^\/api\/ai\/(rotation-tasks|rotation-media)\/([^/]+)$/);
     if (videoMatch && validRequestId(videoMatch[2])) {
       if (videoMatch[1] === 'rotation-media') {

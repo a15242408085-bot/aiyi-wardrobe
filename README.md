@@ -1,6 +1,6 @@
 # 爱衣橱（Aiyi Wardrobe）
 
-爱衣橱是一套面向日常穿搭的衣橱管理与虚拟试穿项目。当前主 Demo 根据用户提供的手机录屏重新编写网页界面，适配电脑与手机浏览器。
+爱衣橱是一套面向日常穿搭的衣橱管理与虚拟试穿项目。当前主 Demo 根据用户提供的手机录屏重新编写网页界面，适配电脑与手机浏览器，并使用独立生成的高清模特与衣物素材。
 
 [打开在线 Demo](https://aiyi-wardrobe-demo.briskthyme.chatgpt.site/) · [代码 MIT 许可](LICENSE)
 
@@ -8,16 +8,18 @@
 
 ## 新版 Demo 怎么体验
 
-- 首页展示真人造型，可左右切换；有转身视频时，可以播放、暂停和拖动查看不同角度。
+- 首页默认展示 6 张新生成的成年女性虚拟模特，可左右切换；原图为 1024×1536 的透明 PNG，完整保留头部、双手与鞋子。有转身视频时，可以播放、暂停和拖动查看不同角度。
 - 拉起人物下方的详情面板，查看本套衣物、颜色和日期，收藏、分享或移除造型。
-- 进入衣橱，按上衣、外套、下装、鞋和包的横向分区选择单品；已选衣物进入浮动托盘。
+- 进入衣橱，按上衣、外套、下装、鞋和包的横向分区选择单品；「精选素材」提供上衣类、裤子、鞋子各 10 张透明 PNG，开衫与拉链卫衣归入外套。已选衣物进入浮动托盘。
 - 展开托盘，点击 `Dress up`，选择全身照片，再提交真人试穿。生成过程中显示任务状态，完成后可以收藏、下载或分享结果。
 - 添加衣物时，可以上传图片、调用识别服务、检查识别结果，再确认入库；也可以手动填写资料。
-- 菜单中可以切换参考演示与个人衣橱、查看人物照片、填写体验码，以及导出或合并导入备份。
+- 菜单中可以切换精选素材与个人衣橱、查看人物照片、填写体验码，以及导出或合并导入备份；历史参考媒体仍有独立入口。
 
 在线识别和真人试穿需要有效体验码，并使用部署端已经配置的模型服务。页面不会把录屏中的示例效果当作本次生成结果。任务断线后可以查询原任务，不会自动再次提交收费请求。
 
-当前的 360 展示通过视频播放和拖动进度实现，并不是可任意观察的 3D 模型。可以给自己的造型导入 MP4、MOV 或 WebM 转身视频；在线 Demo 已接入火山方舟 Seedance 1.0，可从当前全身照生成转身视频。
+当前的 360 展示通过视频播放和拖动进度实现，并不是可任意观察的 3D 模型。可以给自己的造型导入 MP4、MOV 或 WebM 转身视频；在线 Demo 已接入火山方舟 Seedance 1.0，可从当前全身照生成转身视频。Seedance 2.0 的请求参数适配已经加入源码，尚未用新密钥进行真实生成，当前线上仍使用 1.0。
+
+新素材可作为试穿输入；模特原图中的穿搭是预置展示，并不代表用户刚选的单品已经完成试穿。生成器原始 PNG、透明通道与尺寸均保留，页面按需加载图片。个人图片、衣物和生成记录仍保留。
 
 ## 本次重构的范围
 
@@ -29,7 +31,9 @@
 
 ## 直接打开单文件 HTML
 
-下载仓库根目录的 `爱衣橱-暖奶茶网页版.html`，用 Chrome、Edge 或 Safari 打开即可。该文件名为兼容原有分享地址保留，内容使用新版 Demo。
+下载仓库根目录的 `爱衣橱-暖奶茶网页版.html`，用 Chrome、Edge 或 Safari 打开即可。该文件名为兼容原有分享地址保留，内容是此前的重构版本。
+
+本次高清素材更新只发布到在线 Demo；仓库根目录的单文件 HTML 尚未重建，仍使用之前的示例素材。要查看 6 张新模特和 30 张精选单品，请打开在线 Demo。将所有高清 PNG 内嵌会明显增大 HTML 文件，因此本次没有另行生成大体积离线包。
 
 界面、样式、脚本、示例图片与转身片段已经内嵌，无需安装或启动服务。可查看参考造型、整理衣物照片、选择搭配、导入本机转身视频，以及导出备份。通过文件直接打开时不连接 AI 服务，新识别和新试穿请使用在线 Demo 或自己的联网部署。
 
@@ -45,6 +49,8 @@
 - `site/ui/api.js`：识别和试穿接口、进度流与任务查询。
 - `site/ui/studio.js`：新版人物、衣橱、托盘和试穿流程交互。
 - `site/ui/seed.json`、`site/public/video-reference/`：示例资料与参考演示媒体。
+- `site/public/model-assets/`：6 张 1024×1536 高清模特透明 PNG，以及相对路径的素材清单与生成提示词。
+- `site/public/wardrobe-assets/`：上衣类、裤子、鞋子各 10 张透明 PNG，以及素材清单。
 - `app/`：保留的本地工作台。Next.js 前端、FastAPI 后端和原有 AI 工作流。
 - `html/build.py`：将新版 Site 界面及示例媒体打包为单文件 HTML。
 - `docs/`：产品功能与技术方案等历史文档，具体能力以当前运行版本为准。
@@ -67,7 +73,7 @@ npm run start
 - `AIYI_ACCESS_CODE`：体验入口的访问口令。
 - `AIYI_RECOGNITION_KEY`、`AIYI_RECOGNITION_MODEL`：衣物识别服务密钥与模型。
 - `AIYI_IMAGE_KEY`、`AIYI_IMAGE_MODEL`：真人试穿服务密钥与模型。
-- `AIYI_VIDEO_KEY`、`AIYI_VIDEO_MODEL`：火山方舟视频服务密钥与模型，模型默认 `doubao-seedance-1-0-pro-250528`。
+- `AIYI_VIDEO_KEY`、`AIYI_VIDEO_MODEL`：火山方舟视频服务密钥与模型，默认 `doubao-seedance-1-0-pro-250528`；源码也适配 `doubao-seedance-2-0-260128`，切换前须开通对应模型并进行真实生成验证。
 
 体验者在网页中填写体验码；模型 API 密钥由服务端保管，不要放入 `seed.json`、网页脚本或 Git 仓库。当前 Demo 的个人衣橱保存在浏览器，并不是多设备账户同步服务。
 
@@ -102,7 +108,7 @@ node scripts/start_local.mjs
 python3 html/build.py
 ```
 
-脚本只读取公开快照中的 UI 和 `site/public/` 下明确引用的示例媒体，重新生成根目录的 `爱衣橱-暖奶茶网页版.html`，无需额外 Python 包。引用的图片和视频会内嵌进文件，因此文件体积会随媒体增加。
+脚本只读取公开快照中的 UI 和 `site/public/` 下明确引用的示例媒体，允许 `video-reference/`、`studio/`、`model-assets/` 和 `wardrobe-assets/`，重新生成根目录的 `爱衣橱-暖奶茶网页版.html`，无需额外 Python 包。引用的图片和视频会内嵌进文件，因此包含本次高清素材的文件会明显增大。此命令需由维护者主动运行，本次没有执行。
 
 ## 检查
 
@@ -110,7 +116,7 @@ python3 html/build.py
 
 ```sh
 cd site
-node --test tests/video-data.test.mjs tests/video-studio.test.mjs tests/video-rotation-api.test.mjs tests/video-rotation-ui.test.mjs
+node --test tests/video-data.test.mjs tests/video-studio.test.mjs tests/video-rotation-api.test.mjs tests/video-rotation-ui.test.mjs tests/catalog-studio.test.mjs
 node --experimental-strip-types --test lib/aiyi/gate.test.ts lib/aiyi/providers.test.ts lib/aiyi/video-provider.test.ts lib/aiyi/video-jobs.test.ts lib/aiyi/video-gate.test.ts
 npx tsc --noEmit --incremental false
 ```
@@ -135,8 +141,12 @@ WOO / OpenWardrobe 用于产品流程研究；新版网页依据用户提供的�
 
 **示例媒体与代码许可分开。** `site/public/video-reference/` 中的图片和短视频来自用户提供录屏的裁剪，仅用于展示参考交互与视觉效果；这些素材也可能被内嵌到单文件 HTML 中。仓库没有取得或授予其中人物、服装、品牌、画面等内容的额外版权或肖像权许可，MIT 代码许可不构成对这些参考媒体的使用授权。它们不能被理解为原创素材或可自由商用的素材；需要独立使用或分发时，请取得相应授权或替换为自有媒体。
 
+`site/public/model-assets/` 与 `site/public/wardrobe-assets/` 为本项目通过内置图像生成工具新生成的素材，未从历史录屏截取。模特为虚构成年女性形象，素材来源、尺寸和文件校验值见各目录的 `manifest.json`。
+
 ## Seedance 转身视频
 
 在线 Demo 的「Create 360°」支持生成 5 秒、720p、固定镜头的转身视频。点击生成前会说明上传与计费；演示素材不会自动调用视频模型。图片中不可见的背面由模型推测，生成视频不等于准确的 3D 扫描，也不保证每次转满一圈。
+
+Seedance 2.0 适配会关闭音频，通过提示词固定机位，并省略 1.0 的 `camera_fixed` 参数；页面按后端配置显示模型名称。参数测试通过不代表 2.0 已实际生成成功，本次仍等待新密钥，线上配置保持 1.0。2.0 对写实人像有独立的素材验证要求，应使用平台支持的可信人像输入方式；其他工具生成的写实人物也可能被拒绝。[官方肖像素材说明](https://docs.volcengine.com/docs/ark/seedance-portrait-asset-guide?lang=zh)
 
 服务端在首次提交前保存任务记录，接收远端任务 ID 后持续保存；刷新、断线、下载失败时仅查询原任务，不自动重新提交。视频通过带体验码的同源接口取回，服务商密钥及临时媒体地址不会进入前端或备份。结果在服务端保留 7 天，下载的视频保存在当前浏览器。当前演示额度为每浏览器 2 次、全站 6 次，失败尝试也计数；实际费用以服务商账单为准。离线 HTML 无法创建视频任务。
