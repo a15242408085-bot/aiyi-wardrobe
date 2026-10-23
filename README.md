@@ -17,7 +17,7 @@
 
 在线识别和真人试穿需要有效体验码，并使用部署端已经配置的模型服务。页面不会把录屏中的示例效果当作本次生成结果。任务断线后可以查询原任务，不会自动再次提交收费请求。
 
-当前的 360 展示通过视频播放和拖动进度实现，并不是可任意观察的 3D 模型。可以给自己的造型导入 MP4、MOV 或 WebM 转身视频；当前 Demo 没有配置自动生成转身视频的服务。
+当前的 360 展示通过视频播放和拖动进度实现，并不是可任意观察的 3D 模型。可以给自己的造型导入 MP4、MOV 或 WebM 转身视频；在线 Demo 已接入火山方舟 Seedance 1.0，可从当前全身照生成转身视频。
 
 ## 本次重构的范围
 
@@ -67,6 +67,7 @@ npm run start
 - `AIYI_ACCESS_CODE`：体验入口的访问口令。
 - `AIYI_RECOGNITION_KEY`、`AIYI_RECOGNITION_MODEL`：衣物识别服务密钥与模型。
 - `AIYI_IMAGE_KEY`、`AIYI_IMAGE_MODEL`：真人试穿服务密钥与模型。
+- `AIYI_VIDEO_KEY`、`AIYI_VIDEO_MODEL`：火山方舟视频服务密钥与模型，模型默认 `doubao-seedance-1-0-pro-250528`。
 
 体验者在网页中填写体验码；模型 API 密钥由服务端保管，不要放入 `seed.json`、网页脚本或 Git 仓库。当前 Demo 的个人衣橱保存在浏览器，并不是多设备账户同步服务。
 
@@ -109,8 +110,8 @@ python3 html/build.py
 
 ```sh
 cd site
-node --test tests/video-data.test.mjs
-node --experimental-strip-types --test lib/aiyi/gate.test.ts lib/aiyi/providers.test.ts
+node --test tests/video-data.test.mjs tests/video-studio.test.mjs tests/video-rotation-api.test.mjs tests/video-rotation-ui.test.mjs
+node --experimental-strip-types --test lib/aiyi/gate.test.ts lib/aiyi/providers.test.ts lib/aiyi/video-provider.test.ts lib/aiyi/video-jobs.test.ts lib/aiyi/video-gate.test.ts
 npx tsc --noEmit --incremental false
 ```
 
@@ -133,3 +134,9 @@ cd ../backend
 WOO / OpenWardrobe 用于产品流程研究；新版网页依据用户提供的视频参考独立编写。公开仓库不包含它们的反编译程序、下载业务脚本或私有后端实现。
 
 **示例媒体与代码许可分开。** `site/public/video-reference/` 中的图片和短视频来自用户提供录屏的裁剪，仅用于展示参考交互与视觉效果；这些素材也可能被内嵌到单文件 HTML 中。仓库没有取得或授予其中人物、服装、品牌、画面等内容的额外版权或肖像权许可，MIT 代码许可不构成对这些参考媒体的使用授权。它们不能被理解为原创素材或可自由商用的素材；需要独立使用或分发时，请取得相应授权或替换为自有媒体。
+
+## Seedance 转身视频
+
+在线 Demo 的「Create 360°」支持生成 5 秒、720p、固定镜头的转身视频。点击生成前会说明上传与计费；演示素材不会自动调用视频模型。图片中不可见的背面由模型推测，生成视频不等于准确的 3D 扫描，也不保证每次转满一圈。
+
+服务端在首次提交前保存任务记录，接收远端任务 ID 后持续保存；刷新、断线、下载失败时仅查询原任务，不自动重新提交。视频通过带体验码的同源接口取回，服务商密钥及临时媒体地址不会进入前端或备份。结果在服务端保留 7 天，下载的视频保存在当前浏览器。当前演示额度为每浏览器 2 次、全站 6 次，失败尝试也计数；实际费用以服务商账单为准。离线 HTML 无法创建视频任务。

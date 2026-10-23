@@ -1,12 +1,13 @@
-export type Kind = 'recognition' | 'tryOn';
+export type Kind = 'recognition' | 'tryOn' | 'rotation';
 export type Bindings = {
   DB: D1Database; BUCKET: R2Bucket;
   AIYI_ACCESS_CODE: string; AIYI_RECOGNITION_KEY: string; AIYI_IMAGE_KEY: string;
   AIYI_RECOGNITION_MODEL?: string; AIYI_IMAGE_MODEL?: string;
+  AIYI_VIDEO_KEY?: string; AIYI_VIDEO_MODEL?: string;
 };
 export type Job = { id: string; owner_hash: string; kind: Kind; status: 'running' | 'succeeded' | 'failed'; payload_hash: string; result_key: string | null; error: string | null; created_at: number; updated_at: number };
-export const GLOBAL_LIMIT = { recognition: 30, tryOn: 12 } as const;
-export const CLIENT_LIMIT = { recognition: 8, tryOn: 3 } as const;
+export const GLOBAL_LIMIT = { recognition: 30, tryOn: 12, rotation: 6 } as const;
+export const CLIENT_LIMIT = { recognition: 8, tryOn: 3, rotation: 2 } as const;
 export const MAX_JOB_AGE = 12 * 60 * 1000;
 export const RESULT_AGE = 7 * 24 * 60 * 60 * 1000;
 export class GateError extends Error {
@@ -43,12 +44,12 @@ export async function authorize(req: Request, env: Bindings, clientId: unknown):
 export function validRequestId(id: unknown): id is string { return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id); }
 export async function quota(db: D1Database, owner: string) {
   const rows = await db.prepare('SELECT kind, COUNT(*) AS total, SUM(CASE WHEN owner_hash=? THEN 1 ELSE 0 END) AS mine FROM ai_jobs GROUP BY kind').bind(owner).all<{kind: Kind; total: number; mine: number}>();
-  const remaining = { recognition: CLIENT_LIMIT.recognition as number, tryOn: CLIENT_LIMIT.tryOn as number };
+  const remaining = { recognition: CLIENT_LIMIT.recognition as number, tryOn: CLIENT_LIMIT.tryOn as number, rotation: CLIENT_LIMIT.rotation as number };
   for (const row of rows.results) if (row.kind in remaining) remaining[row.kind] = Math.max(0, Math.min(GLOBAL_LIMIT[row.kind] - row.total, CLIENT_LIMIT[row.kind] - row.mine));
   return { remaining, limits: CLIENT_LIMIT, totalLimits: GLOBAL_LIMIT };
 }
 export async function stale(db: D1Database) {
-  await db.prepare("UPDATE ai_jobs SET status='failed', error=?, updated_at=? WHERE status='running' AND created_at<?").bind('连接中断或处理超时，可能已产生模型费用。请先查询结果，不要反复提交。', Date.now(), Date.now() - MAX_JOB_AGE).run();
+  await db.prepare("UPDATE ai_jobs SET status='failed', error=?, updated_at=? WHERE status='running' AND ((kind<>'rotation' AND created_at<?) OR (kind='rotation' AND created_at<?))").bind('连接中断或处理超时，可能已产生模型费用。请先查询结果，不要反复提交。', Date.now(), Date.now() - MAX_JOB_AGE, Date.now() - 2 * 60 * 60 * 1000).run();
 }
 /** Reject large uploads while generation is active; reserve still owns the atomic paid slot. */
 export async function assertUploadAvailable(db: D1Database) {
@@ -95,8 +96,9 @@ export async function failJob(db: D1Database, id: string, owner: string, message
 }
 export async function cleanup(env: Bindings) {
   const now = Date.now();
-  const old = await env.DB.prepare('SELECT id,result_key FROM ai_jobs WHERE result_key IS NOT NULL AND created_at<? LIMIT 10').bind(now - RESULT_AGE).all<{id: string; result_key: string}>();
+  const old = await env.DB.prepare('SELECT id,result_key,kind FROM ai_jobs WHERE result_key IS NOT NULL AND created_at<? LIMIT 10').bind(now - RESULT_AGE).all<{id: string; result_key: string; kind: Kind}>();
   for (const row of old.results) {
+    if (row.kind === 'rotation') await env.BUCKET.delete(`${row.result_key}.mp4`);
     await env.BUCKET.delete(row.result_key);
     await env.DB.prepare('UPDATE ai_jobs SET result_key=NULL WHERE id=? AND result_key=?').bind(row.id, row.result_key).run();
   }

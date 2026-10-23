@@ -2,6 +2,9 @@ import { env as runtimeEnv } from 'cloudflare:workers';
 import { assertUploadAvailable, authorize, checkOrigin, cleanup, digest, failJob, finishJob, GateError, getJob, quota, reserve, RESULT_AGE, validRequestId, type Bindings, type Job, type Kind } from '../../../../lib/aiyi/gate';
 import { recognize, tryOn, validateRecognitionInput, validateTryOnInput, ProviderError } from '../../../../lib/aiyi/providers';
 
+import { createVideoJob, readVideoJob, readVideoMedia } from '../../../../lib/aiyi/video-jobs';
+import { validateRotationInput } from '../../../../lib/aiyi/video-provider';
+
 const env = () => runtimeEnv as unknown as Bindings;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Vary': 'X-Aiyi-Code', 'Referrer-Policy': 'no-referrer' };
 function json(value: unknown, status = 200) { return Response.json(value, { status, headers }); }
@@ -43,20 +46,29 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url), bindings = env(); checkOrigin(request);
     const configured = !!(bindings.DB && bindings.BUCKET && bindings.AIYI_ACCESS_CODE && bindings.AIYI_RECOGNITION_KEY && bindings.AIYI_IMAGE_KEY);
-    if (url.pathname.endsWith('/status') && !request.headers.get('x-aiyi-code')) return json({ authorized: false, configured });
+    if (url.pathname.endsWith('/status') && !request.headers.get('x-aiyi-code')) return json({ authorized: false, configured, rotationConfigured: !!bindings.AIYI_VIDEO_KEY });
     const owner = await authorize(request, bindings, url.searchParams.get('clientId'));
     await cleanup(bindings);
-    if (url.pathname.endsWith('/status')) return json({ authorized: true, configured, ...await quota(bindings.DB, owner) });
+    if (url.pathname.endsWith('/status')) return json({ authorized: true, configured, rotationConfigured: !!bindings.AIYI_VIDEO_KEY, ...await quota(bindings.DB, owner) });
+    const videoMatch = url.pathname.match(/^\/api\/ai\/(rotation-tasks|rotation-media)\/([^/]+)$/);
+    if (videoMatch && validRequestId(videoMatch[2])) {
+      if (videoMatch[1] === 'rotation-media') {
+        const media = await readVideoMedia(bindings, owner, videoMatch[2]);
+        return new Response(media.body, { headers: { ...headers, 'Content-Type': 'video/mp4', 'Content-Length': String(media.size), 'Content-Disposition': 'attachment; filename=rotation.mp4' } });
+      }
+      return json(await readVideoJob(bindings, owner, await getJob(bindings.DB, videoMatch[2], owner)));
+    }
     const match = url.pathname.match(/^\/api\/ai\/tasks\/([^/]+)$/);
     if (!match || !validRequestId(match[1])) throw new GateError(404, 'route', '接口不存在。');
-    return json(await viewJob(bindings, await getJob(bindings.DB, match[1], owner)));
+    const job = await getJob(bindings.DB, match[1], owner);
+    return json(job.kind === 'rotation' ? await readVideoJob(bindings, owner, job) : await viewJob(bindings, job));
   } catch (error) { return problem(error); }
 }
 export async function POST(request: Request) {
   try {
     const bindings = env(), path = new URL(request.url).pathname;
     checkOrigin(request);
-    if (!['/api/ai/recognize', '/api/ai/try-on'].includes(path)) throw new GateError(404, 'route', '接口不存在。');
+    if (!['/api/ai/recognize', '/api/ai/try-on', '/api/ai/rotation'].includes(path)) throw new GateError(404, 'route', '接口不存在。');
     // Verify invitation before accepting a potentially large image body.
     await authorize(request, bindings, 'preflight-client-id-not-used-for-ownership');
     // Existing tasks are recovered with GET; do not buffer another image upload while busy.
@@ -64,6 +76,7 @@ export async function POST(request: Request) {
     const body = await readInput(request);
     const owner = await authorize(request, bindings, body.clientId);
     if (!validRequestId(body.requestId)) throw new GateError(400, 'request_id', '任务编号无效，请刷新页面。');
+    if (path === '/api/ai/rotation') return json(await createVideoJob(bindings, owner, body.requestId, validateRotationInput(body)));
     if (!bindings.AIYI_RECOGNITION_KEY || !bindings.AIYI_IMAGE_KEY) throw new GateError(503, 'not_configured', '模型服务尚未配置完成。');
     const kind: Kind = path.endsWith('/recognize') ? 'recognition' : 'tryOn';
     const input = kind === 'recognition' ? validateRecognitionInput(body) : validateTryOnInput(body);

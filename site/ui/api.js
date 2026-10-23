@@ -22,7 +22,7 @@
   function safeCode(value) { return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(value) ? value : 'unavailable'; }
   function message(data, fallback) {
     const value = data?.message;
-    if (typeof value !== 'string' || !value.trim() || value.length > 700 || /(?:sk-[a-zA-Z0-9]{8,}|Bearer\s|<\/?(?:html|script|body)|\bat\s+\w+\s*\(|https?:\/\/)/i.test(value)) return fallback;
+    if (typeof value !== 'string' || !value.trim() || value.length > 700 || /(?:sk-[a-zA-Z0-9]{8,}|ark-[a-zA-Z0-9-]{8,}|Bearer\s|<\/?(?:html|script|body)|\bat\s+\w+\s*\(|https?:\/\/)/i.test(value)) return fallback;
     return value.trim().slice(0, 500);
   }
   async function readJSON(response) {
@@ -108,5 +108,54 @@
       return result;
     } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
   }
-  globalThis.AiyiAPI = Object.freeze({ makeClientId, status, submit, query });
+  function rotationTask(task, requestId) {
+    if (task.taskId !== requestId) throw issue('返回的转身任务编号不一致，请查询本次任务。', { code: 'task_mismatch', recoverable: true });
+    if (!['queued', 'running', 'succeeded', 'failed'].includes(task.status)) throw issue('转身任务状态暂时不可用，请稍后查询。', { code: 'task_status', recoverable: true });
+    if (task.status === 'succeeded' && task.result?.mediaPath !== `/api/ai/rotation-media/${requestId}`) throw issue('转身结果地址无效，请查询本次任务。', { code: 'media_path', recoverable: true });
+    return { taskId: requestId, status: task.status, ...(task.needsAttention === true ? { needsAttention: true } : {}), ...(task.message ? { message: message(task, '转身任务暂未完成，请稍后查询。') } : {}), ...(task.status === 'succeeded' ? { result: { mediaPath: task.result.mediaPath } } : {}) };
+  }
+  async function createRotation(payload, options = {}) {
+    validate(options, true);
+    if (!payload || typeof payload.image !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(payload.image) || payload.image.length > 2600000) throw issue('请使用清晰、完整的人物照片生成转身视频。', { code: 'input', recoverable: false });
+    let response;
+    try { response = await fetch('/api/ai/rotation', { method: 'POST', headers: headers(options.code), credentials: 'omit', body: JSON.stringify({ image: payload.image, requestId: options.requestId, clientId: options.clientId }) }); }
+    catch (_) { throw issue('连接已中断，转身任务可能已提交。请查询结果，不要重复生成。', { code: 'network', recoverable: true }); }
+    try { return rotationTask(await readJSON(response), options.requestId); }
+    catch (error) { if (response.status >= 500) error.recoverable = true; throw error; }
+  }
+  async function queryRotation(requestId, options = {}) {
+    validate({ ...options, requestId }, true);
+    let response;
+    try { response = await fetch(`/api/ai/rotation-tasks/${encodeURIComponent(requestId)}?clientId=${encodeURIComponent(options.clientId)}`, { headers: headers(options.code), credentials: 'omit', cache: 'no-store' }); }
+    catch (_) { throw issue('转身任务查询中断，可以稍后再次查询。', { code: 'network', recoverable: true }); }
+    return rotationTask(await readJSON(response), requestId);
+  }
+  async function readRotation(mediaPath, options = {}) {
+    const match = typeof mediaPath === 'string' && mediaPath.match(/^\/api\/ai\/rotation-media\/([0-9a-f-]+)$/i);
+    validate({ ...options, requestId: match?.[1] }, true);
+    const maximum = 32 * 1024 * 1024;
+    let response;
+    try { response = await fetch(`${mediaPath}?clientId=${encodeURIComponent(options.clientId)}`, { headers: headers(options.code), credentials: 'omit', cache: 'no-store' }); }
+    catch (_) { throw issue('视频下载暂时中断，任务结果已保留，请再次查询。', { code: 'network', recoverable: true }); }
+    if (!response.ok) return readJSON(response);
+    if (!response.headers.get('content-type')?.toLowerCase().startsWith('video/mp4')) throw issue('视频格式暂时无法读取，请再次查询。', { code: 'media_type', recoverable: true });
+    const declared = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > maximum) throw issue('转身视频超过 32 MB，暂时无法保存。', { code: 'large', recoverable: true });
+    if (!response.body) throw issue('视频内容暂时无法读取，请再次查询。', { code: 'media_empty', recoverable: true });
+    const reader = response.body.getReader(), chunks = []; let bytes = 0;
+    try {
+      while (true) {
+        const chunk = await reader.read(); if (chunk.done) break;
+        bytes += chunk.value.byteLength;
+        if (bytes > maximum) throw issue('转身视频超过 32 MB，暂时无法保存。', { code: 'large', recoverable: true });
+        chunks.push(chunk.value);
+      }
+      if (!bytes) throw issue('视频内容为空，请再次查询。', { code: 'media_empty', recoverable: true });
+      return new Blob(chunks, { type: 'video/mp4' });
+    } catch (error) {
+      if (error.code) throw error;
+      throw issue('视频下载中断，任务结果已保留，请再次查询。', { code: 'network', recoverable: true });
+    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  }
+  globalThis.AiyiAPI = Object.freeze({ makeClientId, status, submit, query, createRotation, queryRotation, readRotation });
 })();
