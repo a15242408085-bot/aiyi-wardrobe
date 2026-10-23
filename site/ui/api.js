@@ -116,9 +116,12 @@
   }
   async function createRotation(payload, options = {}) {
     validate(options, true);
-    if (!payload || typeof payload.image !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(payload.image) || payload.image.length > 2600000) throw issue('请使用清晰、完整的人物照片生成转身视频。', { code: 'input', recoverable: false });
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw issue('请使用清晰、完整的人物照片生成转身视频。', { code: 'input', recoverable: false });
+    const hasSource = Object.hasOwn(payload, 'sourceId'), hasImage = Object.hasOwn(payload, 'image');
+    if (hasSource === hasImage || (hasSource ? typeof payload.sourceId !== 'string' || payload.sourceId.length !== 11 || !/^hq-model-0[1-6]$/.test(payload.sourceId) : typeof payload.image !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(payload.image) || payload.image.length > 2600000)) throw issue('请选择已完成入库的模特，或使用清晰、完整的人物照片。', { code: 'input', recoverable: false });
+    const input = hasSource ? { sourceId: payload.sourceId } : { image: payload.image };
     let response;
-    try { response = await fetch('/api/ai/rotation', { method: 'POST', headers: headers(options.code), credentials: 'omit', body: JSON.stringify({ image: payload.image, requestId: options.requestId, clientId: options.clientId }) }); }
+    try { response = await fetch('/api/ai/rotation', { method: 'POST', headers: headers(options.code), credentials: 'omit', body: JSON.stringify({ ...input, requestId: options.requestId, clientId: options.clientId }) }); }
     catch (_) { throw issue('连接已中断，转身任务可能已提交。请查询结果，不要重复生成。', { code: 'network', recoverable: true }); }
     try { return rotationTask(await readJSON(response), options.requestId); }
     catch (error) { if (response.status >= 500) error.recoverable = true; throw error; }

@@ -27,6 +27,27 @@ test('rotation creation sends one same-origin JSON POST with invitation headers'
   assert.deepEqual(JSON.parse(requests[0].init.body), { image: 'data:image/png;base64,YQ==', requestId: id, clientId: options.clientId });
 });
 
+test('approved portrait submits only its logical source ID and keeps the same task identity', async () => {
+  const requests = [], client = api(async (path, init) => { requests.push({ path, init }); return json({ taskId: id, status: 'queued' }); });
+  await client.createRotation({ sourceId: 'hq-model-03', ignored: 'omit' }, options);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].path, '/api/ai/rotation');
+  assert.deepEqual(JSON.parse(requests[0].init.body), { sourceId: 'hq-model-03', requestId: id, clientId: options.clientId });
+});
+
+test('invalid portrait IDs and ambiguous image/source inputs never reach the API', async () => {
+  let requests = 0;
+  const client = api(async () => { requests++; throw Error('must not fetch'); });
+  const image = 'data:image/png;base64,YQ==';
+  for (const sourceId of ['asset://approved-portrait', '/model-assets/model-01.png', image, 'https://other.example/portrait.png', 'hq-model-07', 'hq-model-01\n', '', null]) {
+    await assert.rejects(client.createRotation({ sourceId }, options), error => error.code === 'input' && error.recoverable === false);
+  }
+  for (const payload of [{}, [], { sourceId: 'hq-model-01', image }, { sourceId: 'hq-model-01', image: undefined }, { sourceId: undefined, image }]) {
+    await assert.rejects(client.createRotation(payload, options), error => error.code === 'input' && error.recoverable === false);
+  }
+  assert.equal(requests, 0);
+});
+
 test('rotation network or server failures are recoverable and never retry POST', async () => {
   for (const request of [async () => { throw Error('offline'); }, async () => json({ message: '暂时中断' }, 503)]) {
     let calls = 0;

@@ -2,10 +2,11 @@
 // @ts-ignore TS5097: Native Node tests load this source directly; the Worker bundler also resolves it.
 import { ProviderError, validateRecognitionInput } from './providers.ts';
 
-export type RotationEnv = { AIYI_VIDEO_KEY?: string; AIYI_VIDEO_MODEL?: string };
-export type RotationInput = { image: string };
+export type RotationEnv = { AIYI_VIDEO_KEY?: string; AIYI_VIDEO_MODEL?: string; AIYI_VIDEO_ASSETS?: string };
+export type RotationSourceId = `hq-model-0${1 | 2 | 3 | 4 | 5 | 6}`;
+export type RotationInput = { image: string; sourceId?: never } | { sourceId: RotationSourceId; image?: never };
 export type RotationStatus = { status: 'queued' | 'running' | 'succeeded' | 'failed' | 'expired'; videoUrl?: string; message?: string };
-export type RotationMetadata = { modelLabel: string; duration: number; resolution: string };
+export type RotationMetadata = { modelLabel: string; duration: number; resolution: string; approvedSourceIds?: RotationSourceId[]; requiresApprovedPortrait?: true };
 const BASE = 'https://ark.cn-beijing.volces.com/api/v3';
 const DEFAULT_MODEL = 'doubao-seedance-1-0-pro-250528';
 const DURATION = 5;
@@ -13,6 +14,9 @@ const RESOLUTION = '720p';
 const MAX_JSON = 128 * 1024;
 const MAX_VIDEO = 32 * 1024 * 1024;
 const TASK_ID = /^[A-Za-z0-9_-]{1,160}$/;
+// Absolute end assertions also reject JavaScript's special trailing-newline `$` case.
+const SOURCE_ID = /^hq-model-0[1-6](?![\s\S])/;
+const ASSET_URI = /^asset:\/\/asset-[0-9]{14}-[A-Za-z0-9]{1,32}(?![\s\S])/;
 const UNKNOWN = '视频请求已发送，但尚未确认提交结果。请先核对本次任务，不要重复生成，以免重复付费。';
 const PROMPT = 'One continuous full-body wardrobe turntable shot. The person in the reference turns slowly one complete 360-degree revolution, returning to the starting orientation. Keep the camera fully fixed, the person centered, and the entire body and shoes visible. Preserve exactly the same face, identity, hairstyle, body proportions, garment shapes, colors, prints, materials, lighting and background throughout. Keep arms relaxed in the same position. No walking, gestures, camera orbit, zoom, cuts, text, extra people or audio.';
 
@@ -31,6 +35,15 @@ export function rotationModel(env: RotationEnv): string {
   return value;
 }
 function seedance2(model: string): boolean { return /^doubao-seedance-2-0(?:-|$)/.test(model); }
+function approvedAssets(env: RotationEnv): Partial<Record<RotationSourceId, string>> {
+  if (env.AIYI_VIDEO_ASSETS === undefined) return {};
+  const invalid = () => new ProviderError('configuration_error', '可信模特素材配置不正确，请联系网站管理员。');
+  if (typeof env.AIYI_VIDEO_ASSETS !== 'string' || env.AIYI_VIDEO_ASSETS.length > 4096) throw invalid();
+  let value: unknown;
+  try { value = JSON.parse(env.AIYI_VIDEO_ASSETS); } catch { throw invalid(); }
+  if (!object(value) || Object.entries(value).some(([id, uri]) => !SOURCE_ID.test(id) || typeof uri !== 'string' || !ASSET_URI.test(uri))) throw invalid();
+  return value;
+}
 export function rotationMetadata(env: RotationEnv): RotationMetadata {
   const model = env.AIYI_VIDEO_MODEL ?? DEFAULT_MODEL;
   let modelLabel = '视频生成服务';
@@ -41,10 +54,33 @@ export function rotationMetadata(env: RotationEnv): RotationMetadata {
     else if (/^doubao-seedance-1-0-pro-fast(?:-|$)/.test(model)) modelLabel = 'Seedance 1.0 Fast';
     else if (/^doubao-seedance-1-0-pro(?:-|$)/.test(model)) modelLabel = 'Seedance 1.0';
   }
-  // Expose presentation metadata only, never a key or a private endpoint ID.
+  // A malformed configuration must never make the public status endpoint leak its contents.
+  // Only exact catalog originals are approved; a try-on result is a different image.
+  if (typeof model === 'string' && seedance2(model)) {
+    let approvedSourceIds: RotationSourceId[] = [];
+    try { approvedSourceIds = (Object.keys(approvedAssets(env)) as RotationSourceId[]).sort(); } catch { /* Fail closed in public metadata. */ }
+    return { modelLabel, duration: DURATION, resolution: RESOLUTION, requiresApprovedPortrait: true, approvedSourceIds };
+  }
+  // Expose presentation metadata only, never a key, asset URI or private endpoint ID.
   return { modelLabel, duration: DURATION, resolution: RESOLUTION };
 }
-export function validateRotationInput(body: unknown): RotationInput { return validateRecognitionInput(body); }
+export function validateRotationInput(body: unknown): RotationInput {
+  if (object(body) && 'sourceId' in body) {
+    if ('image' in body || typeof body.sourceId !== 'string' || !SOURCE_ID.test(body.sourceId)) {
+      throw new ProviderError('invalid_request', '请选择有效的模特原图，不可同时提交图片与模特编号。');
+    }
+    return { sourceId: body.sourceId as RotationSourceId };
+  }
+  return validateRecognitionInput(body);
+}
+/** Call before reserving a new paid job; unknown catalog sources never consume quota. */
+export function resolveRotationSource(input: RotationInput, env: RotationEnv): string {
+  const validated = validateRotationInput(input);
+  if (validated.sourceId === undefined) return validated.image;
+  const source = approvedAssets(env)[validated.sourceId];
+  if (!source) throw new ProviderError('portrait_required', '这张模特原图尚未完成平台素材入库，请联系管理员完成审核后再生成。本次未提交视频任务。');
+  return source;
+}
 function taskId(value: unknown): string {
   if (typeof value !== 'string' || !TASK_ID.test(value)) throw new ProviderError('invalid_request', '视频任务编号无效，请查看原有任务记录。');
   return value;
@@ -145,9 +181,9 @@ async function request(path: string, env: RotationEnv, payload: unknown | undefi
   } finally { clearTimeout(timer); signal?.removeEventListener('abort', cancel); }
 }
 export async function createRotation(input: RotationInput, env: RotationEnv, signal?: AbortSignal): Promise<{ remoteId: string; model: string }> {
-  const validated = validateRotationInput(input), model = rotationModel(env);
+  const source = resolveRotationSource(input, env), model = rotationModel(env);
   const output = await request('/contents/generations/tasks', env, {
-    model, content: [{ type: 'text', text: PROMPT }, { type: 'image_url', image_url: { url: validated.image }, role: 'first_frame' }],
+    model, content: [{ type: 'text', text: PROMPT }, { type: 'image_url', image_url: { url: source }, role: 'first_frame' }],
     resolution: RESOLUTION, ratio: '9:16', duration: DURATION, watermark: false,
     ...(seedance2(model) ? { generate_audio: false } : { camera_fixed: true }),
   }, signal);

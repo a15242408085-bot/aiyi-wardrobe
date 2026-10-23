@@ -6,6 +6,8 @@ import { test, type TestContext } from 'node:test';
 import { createVideoJob, readVideoJob, readVideoMedia } from './video-jobs.ts';
 // @ts-ignore TS5097: Node tests load TypeScript sources directly.
 import { getJob, GateError, RESULT_AGE, type Bindings } from './gate.ts';
+// @ts-ignore TS5097: Node tests load TypeScript sources directly.
+import { ProviderError } from './providers.ts';
 
 const owner='a'.repeat(64), other='b'.repeat(64);
 const taskId='00000000-0000-4000-8000-000000000001', remoteId='cgt-offline-fixture-1';
@@ -48,6 +50,43 @@ test('same request ID and all recovery queries use exactly one paid POST',async(
   assert.equal((await readVideoJob(ctx.env,owner,await ownedJob(ctx.env))).status,'running');
   assert.equal(paid,1);assert.equal(queries,2);assert.equal(fetch.mock.callCount(),3);
   assert.equal(ctx.sqlite.prepare('SELECT COUNT(*) AS n FROM ai_jobs').get()?.n,1);
+});
+
+test('unapproved or malformed source mapping fails before any quota, recovery writes or paid request',async(t)=>{
+  const ctx=setup(t);ctx.env.AIYI_VIDEO_MODEL='doubao-seedance-2-0-260128';
+  const fetch=mockFetch(t,()=>{throw Error('must not call');});
+  for(const mapping of [undefined,'{}','{"hq-model-02":"asset://asset-20261024123456-offline"}','{"hq-model-01":"https://private.invalid/image.png"}']){
+    ctx.env.AIYI_VIDEO_ASSETS=mapping;
+    await assert.rejects(createVideoJob(ctx.env,owner,taskId,{sourceId:'hq-model-01'}),error=>{assert.ok(error instanceof ProviderError);assert.ok(['portrait_required','configuration_error'].includes(error.code));assert.equal(error.message.includes('private.invalid'),false);return true;});
+  }
+  assert.equal(ctx.sqlite.prepare('SELECT COUNT(*) AS n FROM ai_jobs').get()?.n,0);
+  assert.equal(ctx.puts.length,0);assert.equal(fetch.mock.callCount(),0);
+});
+
+test('approved source jobs retain one paid call and can recover after source mapping changes or disappears',async(t)=>{
+  const ctx=setup(t),assetUri='asset://asset-20261024123456-offline';
+  ctx.env.AIYI_VIDEO_MODEL='doubao-seedance-2-0-260128';ctx.env.AIYI_VIDEO_ASSETS=JSON.stringify({'hq-model-01':assetUri});
+  let paid=0,queries=0;
+  mockFetch(t,async request=>{
+    if(request.method==='POST'){
+      paid++;assert.equal(ctx.manifest().phase,'submitting');
+      const payload=await request.json()as{content:Array<{image_url?:{url:string}}>};assert.equal(payload.content[1].image_url?.url,assetUri);
+      return Response.json({id:remoteId});
+    }
+    queries++;return providerResult('running');
+  });
+  const original={sourceId:'hq-model-01'}as const;
+  assert.equal((await createVideoJob(ctx.env,owner,taskId,original)).status,'queued');
+  ctx.env.AIYI_VIDEO_ASSETS=JSON.stringify({'hq-model-01':'asset://asset-20261024123457-another'});
+  assert.equal((await createVideoJob(ctx.env,owner,taskId,original)).status,'running');
+  delete ctx.env.AIYI_VIDEO_ASSETS;
+  assert.equal((await createVideoJob(ctx.env,owner,taskId,original)).status,'running');
+  assert.equal((await readVideoJob(ctx.env,owner,await ownedJob(ctx.env))).status,'running');
+  await assert.rejects(createVideoJob(ctx.env,owner,taskId,{sourceId:'hq-model-02'}),isGate('request_conflict'));
+  await assert.rejects(createVideoJob(ctx.env,owner,taskId,input),isGate('request_conflict'));
+  await assert.rejects(createVideoJob(ctx.env,other,taskId,original),isGate('not_found'));
+  assert.equal(paid,1);assert.equal(queries,3);assert.equal(ctx.sqlite.prepare('SELECT COUNT(*) AS n FROM ai_jobs').get()?.n,1);
+  assert.equal(JSON.stringify(ctx.manifest()).includes(assetUri),false);
 });
 
 test('provider task ID is durably persisted before the first provider query',async(t)=>{

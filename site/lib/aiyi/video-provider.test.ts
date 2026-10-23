@@ -4,12 +4,14 @@ import { test, type TestContext } from 'node:test';
 // @ts-ignore TS5097: Native Node tests load the TypeScript source directly.
 import { ProviderError } from './providers.ts';
 // @ts-ignore TS5097: Native Node tests load the TypeScript source directly.
-import { createRotation, downloadRotation, queryRotation, rotationMetadata, rotationModel, validateRotationInput } from './video-provider.ts';
+import { createRotation, downloadRotation, queryRotation, resolveRotationSource, rotationMetadata, rotationModel, validateRotationInput } from './video-provider.ts';
 
 const env = { AIYI_VIDEO_KEY: 'offline-ark-test-only-key' };
 const image = `data:image/png;base64,${Buffer.from([137,80,78,71,13,10,26,10,1,2,3,4]).toString('base64')}`;
 const id = 'cgt-20261024123456-offline';
 const media = 'https://ark-content.volccdn.com/video/result.mp4?signature=offline';
+const approvedUri = 'asset://asset-20261024123456-offline';
+const approvedEnv = {...env, AIYI_VIDEO_MODEL:'doubao-seedance-2-0-260128', AIYI_VIDEO_ASSETS:JSON.stringify({'hq-model-01':approvedUri})};
 function mockFetch(t: TestContext, handler: (request: Request) => Promise<Response> | Response) {
   return t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => handler(input instanceof Request ? input : new Request(input, init)));
 }
@@ -45,6 +47,57 @@ test('one explicit fallback model and strict configured model validation', () =>
   for (const value of ['', '../models', 'x?key=secret', 'bad name', 'x'.repeat(121)]) assert.throws(() => rotationModel({AIYI_VIDEO_MODEL:value}), errorCode('configuration_error'));
 });
 
+test('rotation accepts only exact catalog source IDs and never both sources', (t) => {
+  const fetch=mockFetch(t,()=>{throw Error('must not call');});
+  for(let n=1;n<=6;n++)assert.deepEqual(validateRotationInput({sourceId:`hq-model-0${n}`,requestId:'discard'}),{sourceId:`hq-model-0${n}`});
+  for(const value of [{sourceId:'hq-model-00'},{sourceId:'hq-model-07'},{sourceId:'hq-model-1'},{sourceId:'hq-model-01\n'},{sourceId:'hq-model-01\r'},{sourceId:'hq-model-01\u2028'},{sourceId:'../model-01'},{sourceId:approvedUri},{sourceId:null},{sourceId:'hq-model-01',image},{sourceId:'hq-model-01',image:undefined},{sourceId:undefined,image}]){
+    assert.throws(()=>validateRotationInput(value),errorCode('invalid_request'));
+  }
+  assert.equal(resolveRotationSource({sourceId:'hq-model-01'},approvedEnv),approvedUri);
+  assert.throws(()=>resolveRotationSource({sourceId:'hq-model-02'},approvedEnv),errorCode('portrait_required'));
+  assert.equal(fetch.mock.callCount(),0);
+});
+
+test('approved source configuration fails closed for arbitrary URLs, IDs or malformed JSON', async(t)=>{
+  const fetch=mockFetch(t,()=>{throw Error('must not call');});
+  const invalidValues=['', 'null', '[]', '{', '"private credential"', 'x'.repeat(4097),
+    JSON.stringify({'hq-model-01':'https://private.invalid/image.png'}),
+    JSON.stringify({'hq-model-01':'asset://asset-20261024123456-offline?secret=private'}),
+    JSON.stringify({'hq-model-01':'asset://asset-20261024123456-offline/path'}),
+    JSON.stringify({'hq-model-01':`${approvedUri}\n`}),
+    JSON.stringify({'hq-model-01':`${approvedUri}\r`}),
+    JSON.stringify({'hq-model-01':`${approvedUri}\u2028`}),
+    JSON.stringify({'hq-model-01\n':approvedUri}),
+    JSON.stringify({'hq-model-01':'asset://asset-invalid'}),
+    JSON.stringify({'hq-model-01':1}), JSON.stringify({'hq-model-07':approvedUri}),
+    '{"__proto__":"asset://asset-20261024123456-offline"}',
+    JSON.stringify({'hq-model-01':approvedUri,'unrelated':'private credential'})];
+  for(const value of invalidValues){
+    const config={...approvedEnv,AIYI_VIDEO_ASSETS:value};
+    await assert.rejects(createRotation({sourceId:'hq-model-01'},config),error=>{errorCode('configuration_error')(error);assert.ok(!(error as Error).message.includes(approvedUri));if(value)assert.ok(!(error as Error).message.includes(value));return true;});
+    assert.deepEqual(rotationMetadata(config).approvedSourceIds,[]);
+  }
+  await assert.rejects(createRotation({sourceId:'hq-model-01'},env),errorCode('portrait_required'));
+  assert.equal(resolveRotationSource({image},{...env,AIYI_VIDEO_ASSETS:'invalid'}),image);
+  assert.equal(fetch.mock.callCount(),0);
+});
+
+test('an approved catalog original is sent by asset URI once without exposing it in metadata', async(t)=>{
+  const fetch=mockFetch(t,async request=>{
+    assert.equal(request.method,'POST');
+    const body=await request.json()as{content:Array<Record<string,unknown>>};
+    assert.deepEqual(body.content[1],{type:'image_url',image_url:{url:approvedUri},role:'first_frame'});
+    assert.equal(JSON.stringify(body).includes('hq-model-01'),false);
+    return Response.json({id});
+  });
+  assert.deepEqual(await createRotation({sourceId:'hq-model-01'},approvedEnv),{remoteId:id,model:approvedEnv.AIYI_VIDEO_MODEL});
+  const metadata=rotationMetadata({...approvedEnv,AIYI_VIDEO_ASSETS:JSON.stringify({'hq-model-06':approvedUri,'hq-model-01':approvedUri})});
+  assert.deepEqual(metadata,{modelLabel:'Seedance 2.0',duration:5,resolution:'720p',requiresApprovedPortrait:true,approvedSourceIds:['hq-model-01','hq-model-06']});
+  assert.equal(JSON.stringify(metadata).includes('asset-'),false);
+  assert.equal(JSON.stringify(metadata).includes(env.AIYI_VIDEO_KEY),false);
+  assert.equal(fetch.mock.callCount(),1);
+});
+
 test('public rotation metadata reflects model family without disclosing credentials or endpoint IDs', () => {
   assert.deepEqual(rotationMetadata(env), {modelLabel:'Seedance 1.0',duration:5,resolution:'720p'});
   const cases = [
@@ -58,7 +111,7 @@ test('public rotation metadata reflects model family without disclosing credenti
   ];
   for (const [model,label] of cases) {
     const metadata=rotationMetadata({...env,AIYI_VIDEO_MODEL:model});
-    assert.deepEqual(metadata,{modelLabel:label,duration:5,resolution:'720p'});
+    assert.deepEqual(metadata,{modelLabel:label,duration:5,resolution:'720p',...(label.startsWith('Seedance 2.0')?{requiresApprovedPortrait:true,approvedSourceIds:[]}:{} )});
     assert.ok(!JSON.stringify(metadata).includes(model));
     assert.ok(!JSON.stringify(metadata).includes(env.AIYI_VIDEO_KEY));
   }

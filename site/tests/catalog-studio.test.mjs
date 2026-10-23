@@ -72,7 +72,7 @@ function harness({ api: apiOverrides = {}, save = true, records = new Map(), rec
   const elements = new Map([['seed-data', { textContent: JSON.stringify(seed) }]]);
   const get = id => { if (!elements.has(id)) { const node = new Element(); body.append(node); elements.set(id, node); } return elements.get(id); };
   const resultStage = new Element(), resultPhoto = new Element('img'); body.append(resultStage); resultStage.append(resultPhoto); elements.set('result-photo', resultPhoto);
-  const local = memoryStorage(), objectURLs = [], posted = [], queried = [], timers = new Map();let timerId=0;
+  const local = memoryStorage(), objectURLs = [], posted = [], queried = [], compressed = [], timers = new Map();let timerId=0;
   const api = {
     makeClientId: () => clientId,
     status: async () => ({ authorized: true, configured: true, rotationConfigured: true, remaining: { recognition: 5, tryOn: 5, rotation: 2 } }),
@@ -101,12 +101,13 @@ function harness({ api: apiOverrides = {}, save = true, records = new Map(), rec
     matchMedia: () => ({ matches: true }), requestAnimationFrame: () => 0, cancelAnimationFrame() {},
     URL: { createObjectURL: blob => { const url = `blob:test-${objectURLs.length + 1}`; objectURLs.push({ blob, url }); return url; }, revokeObjectURL() {} },
     localStorage: local, sessionStorage: memoryStorage(), AiyiAPI: api,
+    compressImage: async value => { compressed.push(value); return value; },
   });
   context.window = { scrollTo() {} };
   // Run the shipped functions; only image decoding and platform APIs are mocked.
   vm.runInContext(storageSource, context);
   vm.runInContext(`${source.slice(0, seam)}
-    compress=async value=>value;
+    compress=compressImage;
     globalThis.studio={
       items,find,looks,current,gallery,openItem,renderWardrobe,dressUp,generate,renderVideo,setHomePoster,rotation,rotationSummary,setWardrobeMode,
       setStore:value=>{store=value;},
@@ -116,7 +117,7 @@ function harness({ api: apiOverrides = {}, save = true, records = new Map(), rec
   })();`, context, { filename: 'video-studio-under-test.js' });
   const studio = context.studio;
   studio.setStore(store); studio.setup({ code: 'test-invitation' });
-  return { studio, store, context, elements, get, records, local, objectURLs, posted, queried, timers };
+  return { studio, store, context, elements, get, records, local, objectURLs, posted, queried, compressed, timers };
 }
 
 
@@ -220,4 +221,75 @@ test('rotation label follows server metadata and never claims an unconfigured Se
   h.studio.rotation();await tick();
   assert.ok(all(h.get('rotation-dialog')).some(n=>n.textContent.startsWith('Seedance 1.0 ·')));
   assert.equal(h.posted.length,0,'opening a dialog only reads free status');
+});
+
+
+const seedance2Status = approvedSourceIds => ({
+  authorized:true,configured:true,rotationConfigured:true,remaining:{recognition:5,tryOn:5,rotation:2},
+  rotation:{modelLabel:'Seedance 2.0',duration:5,resolution:'720p',requiresApprovedPortrait:true,approvedSourceIds}
+});
+const rotationButton = h => all(h.get('rotation-dialog')).find(n=>n.textContent==='生成转身视频');
+
+test('approved original catalog portrait uses its source ID without decoding or recompressing its image',async()=>{
+  const status=seedance2Status(['hq-model-03']);
+  const h=harness({api:{status:async()=>status}});h.studio.setup({lookId:'hq-look-03'});
+  h.studio.rotation();
+  assert.equal(rotationButton(h).disabled,true,'wait for the current server capability check');
+  await tick();assert.equal(rotationButton(h).disabled,false);
+  await click(rotationButton(h));
+  assert.equal(h.posted.length,1);
+  assert.deepEqual(plain(h.posted[0].payload),{sourceId:'hq-model-03'});
+  assert.deepEqual(h.compressed,[]);
+  const saved=h.records.get(pendingKey);
+  assert.equal(saved.context.sourceId,'hq-model-03');
+  assert.equal(saved.context.modelImage,'/model-assets/model-03.png','recovery retains the preview independently of the provider input');
+  assert.equal(h.get('processing-photo').src,'/model-assets/model-03.png');
+});
+
+test('a portrait missing approval disables generation with a usable import-video alternative',async()=>{
+  const h=harness({api:{status:async()=>seedance2Status(['hq-model-02'])}});
+  h.studio.rotation();await tick();
+  assert.equal(rotationButton(h).disabled,true);
+  assert.ok(all(h.get('rotation-dialog')).some(n=>n.textContent.includes('这张模特需先完成火山人像入库')));
+  const imported=all(h.get('rotation-dialog')).find(n=>n.textContent==='导入 MP4 / MOV / WebM');
+  assert.ok(imported);assert.notEqual(imported.disabled,true);
+  assert.equal(h.posted.length,0);
+});
+
+test('a new try-on image never borrows approval from its original model ID or matching poster path',async()=>{
+  const h=harness({api:{status:async()=>seedance2Status(['hq-model-01'])}});
+  h.store.state.generated.push({id:'new-try-on',name:'新试穿',modelId:'hq-model-01',image:seed.catalog.models[0].image,items:[],createdAt:'2026-10-24'});
+  h.studio.setup({lookId:'new-try-on'});h.studio.rotation();await tick();
+  assert.equal(rotationButton(h).disabled,true);
+  assert.ok(all(h.get('rotation-dialog')).some(n=>n.textContent.includes('新试穿的图片也需要单独入库')));
+  assert.equal(h.posted.length,0);
+});
+
+test('approval removed between opening and clicking is rechecked before any submission',async()=>{
+  let reads=0;
+  const h=harness({api:{status:async()=>seedance2Status(++reads===1?['hq-model-01']:[])}});
+  h.studio.rotation();await tick();assert.equal(rotationButton(h).disabled,false);
+  await click(rotationButton(h));
+  assert.equal(reads,2);
+  assert.equal(h.posted.length,0);
+  assert.equal(h.studio.status().task,null);
+  assert.equal(rotationButton(h).disabled,true);
+  assert.match(h.get('toast').textContent,/先完成火山人像入库/);
+});
+
+test('Seedance 1.0 keeps the original image upload path for the same catalog portrait',async()=>{
+  const h=harness();
+  h.studio.rotation();await tick();await click(rotationButton(h));
+  assert.equal(h.posted.length,1);
+  assert.deepEqual(plain(h.posted[0].payload),{image:'/model-assets/model-01.png'});
+  assert.deepEqual(h.compressed,['/model-assets/model-01.png']);
+});
+
+test('a failed service check cannot reuse stale portrait approval',async()=>{
+  const h=harness({api:{status:async()=>{throw Error('offline');}}});
+  h.studio.setup({service:seedance2Status(['hq-model-01'])});
+  h.studio.rotation();await tick();
+  assert.equal(rotationButton(h).disabled,true);
+  assert.ok(all(h.get('rotation-dialog')).some(n=>n.textContent.includes('暂时无法确认视频服务')));
+  assert.equal(h.posted.length,0);
 });

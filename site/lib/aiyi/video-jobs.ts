@@ -2,7 +2,7 @@
 // @ts-ignore TS5097: Node tests and the Worker resolve the same TypeScript source.
 import { digest, failJob, finishJob, GateError, getJob, reserve, RESULT_AGE, type Bindings, type Job } from './gate.ts';
 // @ts-ignore TS5097: Native Node test imports.
-import { createRotation, downloadRotation, queryRotation, rotationModel, type RotationInput } from './video-provider.ts';
+import { createRotation, downloadRotation, queryRotation, resolveRotationSource, rotationModel, validateRotationInput, type RotationInput } from './video-provider.ts';
 // @ts-ignore TS5097: Native Node test imports.
 import { ProviderError } from './providers.ts';
 
@@ -29,9 +29,18 @@ async function readManifest(env: Bindings, owner: string, job: Job): Promise<Man
 }
 function successful(id: string) { return view(id, 'succeeded', { result: { mediaPath: `/api/ai/rotation-media/${id}` } }); }
 export async function createVideoJob(env: Bindings, owner: string, id: string, input: RotationInput): Promise<View> {
+  const validated = validateRotationInput(input), payloadHash = await digest(JSON.stringify(validated));
+  // Recover an existing ID even if its source mapping was later removed or changed.
+  // reserve still performs the owner, kind and payload checks for this replay.
+  const previous = await env.DB.prepare('SELECT * FROM ai_jobs WHERE id=?').bind(id).first<Job>();
+  if (previous) {
+    const replay = await reserve(env.DB, id, owner, 'rotation', payloadHash);
+    return readVideoJob(env, owner, replay.job);
+  }
   if (!env.AIYI_VIDEO_KEY) throw new GateError(503, 'not_configured', '转身视频服务尚未配置。');
   const model = rotationModel(env);
-  const reservation = await reserve(env.DB, id, owner, 'rotation', await digest(JSON.stringify(input)));
+  resolveRotationSource(validated, env);
+  const reservation = await reserve(env.DB, id, owner, 'rotation', payloadHash);
   if (!reservation.created) return readVideoJob(env, owner, reservation.job);
   const key = metadataKey(owner, id);
   const manifest: Manifest = { version: 1, provider: 'volcengine', model, createdAt: Date.now(), phase: 'submitting' };
@@ -47,7 +56,7 @@ export async function createVideoJob(env: Bindings, owner: string, id: string, i
   }
   let accepted: Awaited<ReturnType<typeof createRotation>>;
   try {
-    accepted = await createRotation(input, { ...env, AIYI_VIDEO_MODEL: model });
+    accepted = await createRotation(validated, { ...env, AIYI_VIDEO_MODEL: model });
   } catch (error) {
     const unknown = !(error instanceof ProviderError) || error.code === 'submission_unknown';
     manifest.phase = unknown ? 'unknown' : 'failed';

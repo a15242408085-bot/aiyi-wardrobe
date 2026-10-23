@@ -10,7 +10,9 @@
 
 视频服务通过后端 `AIYI_VIDEO_KEY` 和 `AIYI_VIDEO_MODEL` 配置。默认仍为 `doubao-seedance-1-0-pro-250528`，也支持 Seedance 2.0 标准版 `doubao-seedance-2-0-260128` 的参数格式。2.0 请求关闭音频，用提示词固定机位，不传仅适用于 1.0 的 `camera_fixed`；页面显示实际配置的模型标签。切换模型必须同时确认账号已开通相应能力。
 
-Seedance 2.0 对写实人像有独立输入要求。普通上传的人脸照片或其他平台生成的写实人像可能被拒绝；应使用平台支持的可信人像输入方式。当前兼容参数测试不代表 2.0 已真实生成成功。[官方肖像素材说明](https://docs.volcengine.com/docs/ark/seedance-portrait-asset-guide?lang=zh)
+Seedance 2.0 对写实人像有独立输入要求。本站原创模特应先进入火山「私域虚拟人像库」，审核为 `Active` 后使用 `asset://` 引用。素材入库使用控制台或 AK/SK 管理接口，视频 API Key 不能代替入库鉴权；素材与视频 Key 必须在同一项目。当前兼容参数测试不代表 2.0 已真实生成成功。[官方肖像素材说明](https://docs.volcengine.com/docs/ark/seedance-portrait-asset-guide?lang=zh)、[私域虚拟人像库](https://docs.volcengine.com/docs/ark/private-virtual-avatar-library-guide-preview?lang=zh)
+
+服务端秘密 `AIYI_VIDEO_ASSETS` 存储 JSON 映射，键为 `hq-model-01` 至 `hq-model-06`，值为对应审核通过的 `asset://asset-…`。前端只发送逻辑 `sourceId`，不会读取真实素材 ID。务必把逻辑 ID 对应到同一张原始模特图；新试穿图不能沿用原图的素材 ID。未配置或无效的映射在预留额度前拒绝，网页会提示先完成人像入库。密钥、素材 ID 和映射值均不提交到公开仓库。
 
 360 视频仍为 5 秒、720p。服务器先保存任务记录再提交，断线后查询原任务，不自动重发收费请求。每浏览器 2 次、全站 6 次的视频试用额度与其他生成任务共用单个并发位置；失败请求也计次数。服务器结果保留 7 天，取回的视频存入本机浏览器。
 

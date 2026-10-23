@@ -3,7 +3,7 @@ export type Bindings = {
   DB: D1Database; BUCKET: R2Bucket;
   AIYI_ACCESS_CODE: string; AIYI_RECOGNITION_KEY: string; AIYI_IMAGE_KEY: string;
   AIYI_RECOGNITION_MODEL?: string; AIYI_IMAGE_MODEL?: string;
-  AIYI_VIDEO_KEY?: string; AIYI_VIDEO_MODEL?: string;
+  AIYI_VIDEO_KEY?: string; AIYI_VIDEO_MODEL?: string; AIYI_VIDEO_ASSETS?: string;
 };
 export type Job = { id: string; owner_hash: string; kind: Kind; status: 'running' | 'succeeded' | 'failed'; payload_hash: string; result_key: string | null; error: string | null; created_at: number; updated_at: number };
 export const GLOBAL_LIMIT = { recognition: 30, tryOn: 12, rotation: 6 } as const;
